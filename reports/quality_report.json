@@ -1,0 +1,35 @@
+{
+  "status": "complete",
+  "rows_exported": 517226,
+  "rows_quarantined": 116,
+  "input_rows": 517342,
+  "validated_rows": 517226,
+  "quarantined_rows": 116,
+  "quarantine_reasons": {
+    "low_alphabetic_ratio": 1,
+    "repeated_punctuation": 115
+  },
+  "quality_rules": {
+    "unicode_normalization": "NFC",
+    "collapse_whitespace": true,
+    "reject_empty": true,
+    "reject_nul": true,
+    "require_letter": true,
+    "max_characters": 2000,
+    "min_alphabetic_ratio": 0.2,
+    "max_repeated_punctuation": 4,
+    "boilerplate_patterns": [
+      "^(read more|advertisement)$"
+    ],
+    "reject_upstream_duplicate_marker": true
+  },
+  "uniqueness_assertion_result": {
+    "rows_checked": 517342,
+    "unique_text_hashes": 517342,
+    "duplicate_rows": 0,
+    "passed": true,
+    "bounded": false
+  },
+  "near_deduplication_performed": false,
+  "source_read_only": true
+}

@@ -1,0 +1,2 @@
+# Optional production staging dependency. JSONL smoke export needs no package.
+pyarrow>=14.0

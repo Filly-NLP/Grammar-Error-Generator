@@ -1,0 +1,29 @@
+{
+  "status": "complete",
+  "exporter_version": "filly-phase4-export-v2",
+  "created_at_utc": "2026-09-07T05:50:52.119145+00:00",
+  "upstream_repository": "Filly-NLP/Sentence-Pair-Scraper",
+  "upstream_branch_or_commit": null,
+  "database": "D:\\files\\Online Classes\\College\\4th Year\\random\\Grammar-Error-Generator\\corpus.db",
+  "input_sqlite_sha256": "aadfbbaf0f9ee428e394395a4c73a13dcb0a798b75ca2356eece0f1df0fc7f50",
+  "input_row_count": 1000,
+  "uniqueness_assertion_result": {
+    "rows_checked": 1000,
+    "unique_text_hashes": 1000,
+    "duplicate_rows": 0,
+    "passed": true,
+    "bounded": true
+  },
+  "source_read_only": true,
+  "near_deduplication_performed": false,
+  "config_path": "D:\\files\\Online Classes\\College\\4th Year\\random\\Grammar-Error-Generator\\config\\filly.yaml",
+  "config_hash": "d935d0a2a0a881a42337e6602337e33d7416f73b5d85d661f6caef95d3e00fb4",
+  "fetch_size": 250,
+  "format": "parquet",
+  "artifacts": {
+    "base_sentences": "D:\\files\\Online Classes\\College\\4th Year\\random\\Grammar-Error-Generator\\data\\interim\\smoke_base.parquet",
+    "validated_clean": "D:\\files\\Online Classes\\College\\4th Year\\random\\Grammar-Error-Generator\\data\\interim\\smoke_validated.parquet",
+    "quarantined_clean": "D:\\files\\Online Classes\\College\\4th Year\\random\\Grammar-Error-Generator\\data\\interim\\smoke_quarantine.parquet"
+  },
+  "quality_report": "D:\\files\\Online Classes\\College\\4th Year\\random\\Grammar-Error-Generator\\reports\\smoke_quality_report.json"
+}

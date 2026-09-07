@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "filly-geg"
+version = "0.1.0"
+description = "FILLY Filipino grammar-error generation and corpus preparation"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+  "pyarrow>=14.0",
+  "PyYAML>=6.0",
+  "pytest>=8.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]

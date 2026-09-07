@@ -1,0 +1,17 @@
+{
+  "version": "filly-balarila-table3-v1",
+  "table": "Balarila Table 3",
+  "states": [
+    {"id": "BASE", "label": "Base", "aspect": "base", "focus": null, "correction_tag": "$TRANSFORM_VERB_BASE", "can_be_target": true},
+    {"id": "COMPACT", "label": "Completed Aspect + Actor Focus", "aspect": "completed", "focus": "actor", "correction_tag": "$TRANSFORM_VERB_COMPACT", "can_be_target": true},
+    {"id": "INCACT", "label": "Incompleted Aspect + Actor Focus", "aspect": "incompleted", "focus": "actor", "correction_tag": "$TRANSFORM_VERB_INCACT", "can_be_target": true},
+    {"id": "CONTACT", "label": "Contemplated Aspect + Actor Focus", "aspect": "contemplated", "focus": "actor", "correction_tag": "$TRANSFORM_VERB_CONTACT", "can_be_target": true},
+    {"id": "IMPACT", "label": "Imperative Aspect + Actor Focus", "aspect": "imperative", "focus": "actor", "correction_tag": null, "can_be_target": false},
+    {"id": "COMPOBJ", "label": "Completed Aspect + Object Focus", "aspect": "completed", "focus": "object", "correction_tag": "$TRANSFORM_VERB_COMPOBJ", "can_be_target": true},
+    {"id": "INCOBJ", "label": "Incompleted Aspect + Object Focus", "aspect": "incompleted", "focus": "object", "correction_tag": "$TRANSFORM_VERB_INCOBJ", "can_be_target": true},
+    {"id": "CONTOBJ", "label": "Contemplated Aspect + Object Focus", "aspect": "contemplated", "focus": "object", "correction_tag": "$TRANSFORM_VERB_CONTOBJ", "can_be_target": true},
+    {"id": "IMPOBJ", "label": "Imperative Aspect + Object Focus", "aspect": "imperative", "focus": "object", "correction_tag": null, "can_be_target": false},
+    {"id": "RECCOMP", "label": "Recently Completed Aspect", "aspect": "recently_completed", "focus": null, "correction_tag": "$TRANSFORM_VERB_RECCOMP", "can_be_target": true}
+  ],
+  "table2_target_mismatch": ["IMPACT", "IMPOBJ"]
+}

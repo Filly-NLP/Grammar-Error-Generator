@@ -1,0 +1,1199 @@
+{
+  "database": "D:\\files\\Online Classes\\College\\4th Year\\random\\Grammar-Error-Generator\\corpus.db",
+  "sha256": "aadfbbaf0f9ee428e394395a4c73a13dcb0a798b75ca2356eece0f1df0fc7f50",
+  "tables": [
+    {
+      "name": "articles",
+      "type": "table",
+      "row_count": 40648,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "article_id",
+          "type": "VARCHAR(50)",
+          "notnull": 1,
+          "default": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "source_id",
+          "type": "VARCHAR(50)",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "url_id",
+          "type": "INTEGER",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "url",
+          "type": "TEXT",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "canonical_url",
+          "type": "TEXT",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 5,
+          "name": "headline",
+          "type": "TEXT",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 6,
+          "name": "author",
+          "type": "VARCHAR(100)",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 7,
+          "name": "publication_date",
+          "type": "DATETIME",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 8,
+          "name": "date_source",
+          "type": "VARCHAR(20)",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 9,
+          "name": "sentence_count",
+          "type": "INTEGER",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 10,
+          "name": "modified_date",
+          "type": "DATETIME",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 11,
+          "name": "category",
+          "type": "VARCHAR(100)",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 12,
+          "name": "section",
+          "type": "VARCHAR(100)",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 13,
+          "name": "language",
+          "type": "VARCHAR(20)",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 14,
+          "name": "language_confidence",
+          "type": "FLOAT",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 15,
+          "name": "article_text",
+          "type": "TEXT",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 16,
+          "name": "content_hash",
+          "type": "VARCHAR(64)",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 17,
+          "name": "is_duplicate",
+          "type": "BOOLEAN",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 18,
+          "name": "duplicate_group_id",
+          "type": "VARCHAR(50)",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 19,
+          "name": "retrieved_at",
+          "type": "DATETIME",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 20,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        }
+      ],
+      "indexes": [
+        {
+          "seq": 0,
+          "name": "sqlite_autoindex_articles_2",
+          "unique": 1,
+          "origin": "u",
+          "partial": 0
+        },
+        {
+          "seq": 1,
+          "name": "sqlite_autoindex_articles_1",
+          "unique": 1,
+          "origin": "pk",
+          "partial": 0
+        }
+      ]
+    },
+    {
+      "name": "crawl_events",
+      "type": "table",
+      "row_count": 533001,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "event_id",
+          "type": "INTEGER",
+          "notnull": 1,
+          "default": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "crawl_id",
+          "type": "VARCHAR(50)",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "source_id",
+          "type": "VARCHAR(50)",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "url",
+          "type": "TEXT",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "event_type",
+          "type": "VARCHAR(50)",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 5,
+          "name": "http_status",
+          "type": "INTEGER",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 6,
+          "name": "error_message",
+          "type": "TEXT",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 7,
+          "name": "timestamp",
+          "type": "DATETIME",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        }
+      ],
+      "indexes": []
+    },
+    {
+      "name": "crawl_runs",
+      "type": "table",
+      "row_count": 19,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "crawl_id",
+          "type": "VARCHAR(50)",
+          "notnull": 1,
+          "default": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "source_id",
+          "type": "VARCHAR(50)",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "mode",
+          "type": "VARCHAR(20)",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "start_time",
+          "type": "DATETIME",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "end_time",
+          "type": "DATETIME",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 5,
+          "name": "date_range_from",
+          "type": "VARCHAR(20)",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 6,
+          "name": "date_range_to",
+          "type": "VARCHAR(20)",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 7,
+          "name": "urls_discovered",
+          "type": "INTEGER",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 8,
+          "name": "urls_fetched",
+          "type": "INTEGER",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 9,
+          "name": "articles_extracted",
+          "type": "INTEGER",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 10,
+          "name": "sentences_accepted",
+          "type": "INTEGER",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 11,
+          "name": "sentences_rejected",
+          "type": "INTEGER",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 12,
+          "name": "crawler_version",
+          "type": "VARCHAR(20)",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 13,
+          "name": "config_hash",
+          "type": "VARCHAR(64)",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        }
+      ],
+      "indexes": [
+        {
+          "seq": 0,
+          "name": "sqlite_autoindex_crawl_runs_1",
+          "unique": 1,
+          "origin": "pk",
+          "partial": 0
+        }
+      ]
+    },
+    {
+      "name": "discovery_observation_samples",
+      "type": "table",
+      "row_count": 10,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "sample_id",
+          "type": "INTEGER",
+          "notnull": 1,
+          "default": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "observation_id",
+          "type": "INTEGER",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "candidate_url",
+          "type": "TEXT",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "normalized_url",
+          "type": "TEXT",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "observed_at",
+          "type": "DATETIME",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        }
+      ],
+      "indexes": [
+        {
+          "seq": 0,
+          "name": "ix_discovery_observation_samples_observation_id",
+          "unique": 0,
+          "origin": "c",
+          "partial": 0
+        }
+      ]
+    },
+    {
+      "name": "discovery_observations",
+      "type": "table",
+      "row_count": 9,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "observation_id",
+          "type": "INTEGER",
+          "notnull": 1,
+          "default": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "crawl_id",
+          "type": "VARCHAR(50)",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "source_id",
+          "type": "VARCHAR(50)",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "discovery_method",
+          "type": "VARCHAR(30)",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "root_url",
+          "type": "TEXT",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 5,
+          "name": "outcome",
+          "type": "VARCHAR(30)",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 6,
+          "name": "reason",
+          "type": "VARCHAR(80)",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 7,
+          "name": "http_status",
+          "type": "INTEGER",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 8,
+          "name": "observation_count",
+          "type": "INTEGER",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 9,
+          "name": "metadata_json",
+          "type": "TEXT",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 10,
+          "name": "detail_json",
+          "type": "TEXT",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 11,
+          "name": "observed_at",
+          "type": "DATETIME",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        }
+      ],
+      "indexes": [
+        {
+          "seq": 0,
+          "name": "ix_discovery_observations_crawl_source_outcome",
+          "unique": 0,
+          "origin": "c",
+          "partial": 0
+        },
+        {
+          "seq": 1,
+          "name": "ix_discovery_observations_source_reason_observed_at",
+          "unique": 0,
+          "origin": "c",
+          "partial": 0
+        }
+      ]
+    },
+    {
+      "name": "sentences",
+      "type": "table",
+      "row_count": 517342,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "sentence_id",
+          "type": "VARCHAR(50)",
+          "notnull": 1,
+          "default": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "article_id",
+          "type": "VARCHAR(50)",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "source_id",
+          "type": "VARCHAR(50)",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "sentence_index",
+          "type": "INTEGER",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "paragraph_index",
+          "type": "INTEGER",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 5,
+          "name": "sentence_text",
+          "type": "TEXT",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 6,
+          "name": "normalized_text",
+          "type": "TEXT",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 7,
+          "name": "language",
+          "type": "VARCHAR(20)",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 8,
+          "name": "language_confidence",
+          "type": "FLOAT",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 9,
+          "name": "token_count",
+          "type": "INTEGER",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 10,
+          "name": "quality_score",
+          "type": "FLOAT",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 11,
+          "name": "is_quote",
+          "type": "BOOLEAN",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 12,
+          "name": "is_headline",
+          "type": "BOOLEAN",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 13,
+          "name": "content_hash",
+          "type": "VARCHAR(64)",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 14,
+          "name": "is_duplicate",
+          "type": "BOOLEAN",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 15,
+          "name": "duplicate_group_id",
+          "type": "VARCHAR(50)",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 16,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        }
+      ],
+      "indexes": [
+        {
+          "seq": 0,
+          "name": "sqlite_autoindex_sentences_2",
+          "unique": 1,
+          "origin": "u",
+          "partial": 0
+        },
+        {
+          "seq": 1,
+          "name": "sqlite_autoindex_sentences_1",
+          "unique": 1,
+          "origin": "pk",
+          "partial": 0
+        }
+      ]
+    },
+    {
+      "name": "sources",
+      "type": "table",
+      "row_count": 5,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "source_id",
+          "type": "VARCHAR(50)",
+          "notnull": 1,
+          "default": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "name",
+          "type": "VARCHAR(100)",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "domain",
+          "type": "VARCHAR(100)",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "enabled",
+          "type": "BOOLEAN",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "status",
+          "type": "VARCHAR(20)",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 5,
+          "name": "language",
+          "type": "VARCHAR(20)",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 6,
+          "name": "config_json",
+          "type": "TEXT",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 7,
+          "name": "last_success",
+          "type": "DATETIME",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 8,
+          "name": "last_failure",
+          "type": "DATETIME",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 9,
+          "name": "error_count_429",
+          "type": "INTEGER",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 10,
+          "name": "error_count_403",
+          "type": "INTEGER",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 11,
+          "name": "cooldown_until",
+          "type": "DATETIME",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 12,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 13,
+          "name": "updated_at",
+          "type": "DATETIME",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        }
+      ],
+      "indexes": [
+        {
+          "seq": 0,
+          "name": "sqlite_autoindex_sources_1",
+          "unique": 1,
+          "origin": "pk",
+          "partial": 0
+        }
+      ]
+    },
+    {
+      "name": "url_discovery_edges",
+      "type": "table",
+      "row_count": 0,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "edge_id",
+          "type": "INTEGER",
+          "notnull": 1,
+          "default": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "from_url_id",
+          "type": "INTEGER",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "to_url_id",
+          "type": "INTEGER",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "crawl_id",
+          "type": "VARCHAR(50)",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "discovery_method",
+          "type": "VARCHAR(20)",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 5,
+          "name": "depth",
+          "type": "INTEGER",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 6,
+          "name": "link_text",
+          "type": "VARCHAR(500)",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 7,
+          "name": "rel",
+          "type": "VARCHAR(200)",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 8,
+          "name": "discovered_at",
+          "type": "DATETIME",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        }
+      ],
+      "indexes": [
+        {
+          "seq": 0,
+          "name": "ix_url_discovery_edges_crawl_method",
+          "unique": 0,
+          "origin": "c",
+          "partial": 0
+        },
+        {
+          "seq": 1,
+          "name": "ix_url_discovery_edges_from_depth",
+          "unique": 0,
+          "origin": "c",
+          "partial": 0
+        },
+        {
+          "seq": 2,
+          "name": "ix_url_discovery_edges_to_url",
+          "unique": 0,
+          "origin": "c",
+          "partial": 0
+        },
+        {
+          "seq": 3,
+          "name": "sqlite_autoindex_url_discovery_edges_1",
+          "unique": 1,
+          "origin": "u",
+          "partial": 0
+        }
+      ]
+    },
+    {
+      "name": "urls",
+      "type": "table",
+      "row_count": 40738,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "url_id",
+          "type": "INTEGER",
+          "notnull": 1,
+          "default": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "url",
+          "type": "TEXT",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "canonical_url",
+          "type": "TEXT",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "source_id",
+          "type": "VARCHAR(50)",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "status",
+          "type": "VARCHAR(20)",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 5,
+          "name": "discovery_method",
+          "type": "VARCHAR(20)",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 6,
+          "name": "discovered_at",
+          "type": "DATETIME",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 7,
+          "name": "fetched_at",
+          "type": "DATETIME",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 8,
+          "name": "publication_date_hint",
+          "type": "DATETIME",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 9,
+          "name": "sitemap_lastmod_hint",
+          "type": "DATETIME",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 10,
+          "name": "date_hint_source",
+          "type": "VARCHAR(50)",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 11,
+          "name": "date_hint_confidence",
+          "type": "FLOAT",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 12,
+          "name": "content_hash",
+          "type": "VARCHAR(64)",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 13,
+          "name": "error_reason",
+          "type": "TEXT",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 14,
+          "name": "retry_count",
+          "type": "INTEGER",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 15,
+          "name": "next_retry_at",
+          "type": "DATETIME",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 16,
+          "name": "last_http_status",
+          "type": "INTEGER",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 17,
+          "name": "failure_class",
+          "type": "VARCHAR(50)",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 18,
+          "name": "last_attempt_at",
+          "type": "DATETIME",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 19,
+          "name": "processing_started_at",
+          "type": "DATETIME",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 20,
+          "name": "sentence_count",
+          "type": "INTEGER",
+          "notnull": 1,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 21,
+          "name": "extraction_diagnostics",
+          "type": "TEXT",
+          "notnull": 0,
+          "default": null,
+          "pk": 0
+        },
+        {
+          "cid": 22,
+          "name": "discovery_depth",
+          "type": "INTEGER",
+          "notnull": 1,
+          "default": "0",
+          "pk": 0
+        },
+        {
+          "cid": 23,
+          "name": "frontier_priority",
+          "type": "INTEGER",
+          "notnull": 1,
+          "default": "0",
+          "pk": 0
+        }
+      ],
+      "indexes": [
+        {
+          "seq": 0,
+          "name": "ix_urls_frontier_order",
+          "unique": 0,
+          "origin": "c",
+          "partial": 0
+        },
+        {
+          "seq": 1,
+          "name": "ix_urls_due_work",
+          "unique": 0,
+          "origin": "c",
+          "partial": 0
+        },
+        {
+          "seq": 2,
+          "name": "sqlite_autoindex_urls_1",
+          "unique": 1,
+          "origin": "u",
+          "partial": 0
+        }
+      ]
+    }
+  ],
+  "integrity": {
+    "sentences_total": 517342,
+    "normalized_text_distinct": 517342,
+    "normalized_text_duplicate_groups": 0,
+    "upstream_is_duplicate_marked_rows": 0,
+    "normalized_text_unique": true
+  },
+  "read_only": true,
+  "query_only": true
+}

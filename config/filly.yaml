@@ -1,0 +1,79 @@
+{
+  "project": {
+    "name": "filly",
+    "seed": 20260905
+  },
+  "sqlite": {
+    "read_only": true,
+    "fetch_size": 50000
+  },
+  "dataset": {
+    "target_total_pairs": 1000000,
+    "counting_mode": "balarila_total",
+    "errorful_fraction": 0.83,
+    "identity_fraction": 0.17
+  },
+  "input_contract": {
+    "primary_corpus_already_deduplicated": true,
+    "verify_unique_text_hashes": true,
+    "fail_on_duplicate_contract_violation": true,
+    "perform_primary_near_dedupe": false
+  },
+  "splits": {
+    "train": 0.70,
+    "dev": 0.15,
+    "synthetic_test": 0.15,
+    "group_by_document": true
+  },
+  "balarila": {
+    "enforce_table2_registry": true,
+    "table2_tag_count": 39,
+    "allow_unregistered_tags": false,
+    "one_error_baseline": true
+  },
+  "stage_views": {
+    "dataset1_errorful_share": 0.80,
+    "dataset2_errorful_share": 0.20
+  },
+  "morphology": {
+    "primary_seed": "unimorph_tgl",
+    "require_frozen_resource_version": true,
+    "minimum_validated_states_per_lemma": 3,
+    "allow_table3_source_states": [
+      "BASE", "COMPACT", "INCACT", "CONTACT", "IMPACT",
+      "COMPOBJ", "INCOBJ", "CONTOBJ", "IMPOBJ", "RECCOMP"
+    ],
+    "allowed_target_correction_states": [
+      "BASE", "COMPACT", "INCACT", "CONTACT",
+      "COMPOBJ", "INCOBJ", "CONTOBJ", "RECCOMP"
+    ]
+  },
+  "balitanlp": {
+    "enabled": false,
+    "use_only_on_shortfall": true,
+    "excluded_publishers": ["bandera", "bandera.inquirer"],
+    "cross_corpus_exact_duplicate_check": true,
+    "cross_corpus_near_duplicate_check": "optional_conservative",
+    "rerun_primary_corpus_dedupe": false
+  },
+  "evaluation": {
+    "end_to_end_test_is_separate_from_1m": true,
+    "conditions": [
+      "raw_to_gec",
+      "raw_to_normalizer_to_gec",
+      "oracle_normalized_to_gec"
+    ]
+  },
+  "quality": {
+    "unicode_normalization": "NFC",
+    "collapse_whitespace": true,
+    "reject_empty": true,
+    "reject_nul": true,
+    "require_letter": true,
+    "max_characters": 2000,
+    "min_alphabetic_ratio": 0.20,
+    "max_repeated_punctuation": 4,
+    "boilerplate_patterns": ["^(read more|advertisement)$"],
+    "reject_upstream_duplicate_marker": true
+  }
+}

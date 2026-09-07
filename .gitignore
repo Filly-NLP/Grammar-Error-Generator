@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+data/interim/
+*.parquet
+*.jsonl
+# The supplied source corpus is local input and must never be committed.
+corpus.db
