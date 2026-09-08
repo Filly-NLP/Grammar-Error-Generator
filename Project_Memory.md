@@ -4,6 +4,36 @@ This file is the progress ledger for implementation cycles based on
 `Implementation_Plan.md`. It is updated after each meaningful milestone and
 material failure.
 
+## 2026-09-08 - Comprehensive review fixes implemented
+
+- Added shared destination checks for the schema inspector, morphology
+  importer, exporter, splitter, census, and pilot. Inputs, configuration,
+  manifests, outputs, and reports cannot alias an output, including through
+  existing hard links. Checks precede writers.
+- Phase 5 validates the Phase 4 manifest's configuration and validated-data
+  hash. Phase 6 validates the split manifest and requires quality provenance.
+  Manifest hashes propagate into phase 8; missing/blocked/stale dependencies
+  fail closed. Custom runs use `--quality-manifest` and `--split-report`.
+- Generator source hashes use repository-relative names and bytes instead
+  of absolute checkout paths. The census now records actual per-split
+  candidate counts. Pilot filling rescans when the reserve is insufficient;
+  counts increase only after structural acceptance.
+- Corrected enclitic glide handling and traditional din/daw exceptions;
+  punctuation no longer hides configured informal markers. The old negative
+  enclitic test used a y-ending and was updated to a consonant-ending control.
+- Added disposable-fixture regressions for overwrite prevention, stale
+  provenance, relocated hashes, linguistic boundaries, quota refill, and
+  genuine shortfall. A Luna xhigh worker added 24 destination-matrix tests;
+  root integration review confirmed its changes were limited to that test file.
+- Verification: full pytest passed **83 tests** using the isolated temporary
+  review environment; compileall and git diff --check passed. CLI help confirms
+  both new manifest arguments. The first test run exposed an old y-ending
+  negative expectation, corrected to `Aalis rin.` as a consonant control.
+- Production source DB and Parquet artifacts are unavailable in this checkout.
+  No production regeneration is claimed. Regenerate phases 4, 5, 6, and 8
+  before using the revised pilot; human linguistic review remains pending.
+  Phase 9 and the 1M build were not started.
+
 ## 2026-09-07 - Phase 0 schema audit complete
 
 - Changed files: `scripts/inspect_sqlite.py`, `docs/SQLITE_SCHEMA_AUDIT.md`,

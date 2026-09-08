@@ -6,8 +6,14 @@ import argparse
 import hashlib
 import json
 import sqlite3
+import sys
 from pathlib import Path
 from typing import Any
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from src.geg.artifacts import validate_destinations
 
 
 def quote_identifier(identifier: str) -> str:
@@ -93,6 +99,8 @@ def main() -> None:
     parser.add_argument("database", type=Path)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
+    if args.output:
+        validate_destinations({"database": args.database}, {"report": args.output})
     report = inspect_database(args.database)
     rendered = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
     if args.output:

@@ -19,11 +19,12 @@ from src.geg.generators import GENERATOR_VERSION, Candidate, all_tag_ids, genera
 from src.geg.hashing import sha256_file, sha256_files
 from src.geg.ingest import normalize_text
 from src.geg.tags import require_registered, registry
+from src.geg.artifacts import validate_destinations
 
 
 PILOT_TARGETS = {"train": 70_000, "dev": 15_000, "synthetic_test": 15_000}
 SPLIT_ORDER = {name: index for index, name in enumerate(PILOT_TARGETS)}
-PILOT_BUILDER_VERSION = "filly-phase8-pilot-v2"
+PILOT_BUILDER_VERSION = "filly-phase8-pilot-v3-capacity-refill"
 
 
 def _write_json(path: Path, value: object) -> None:
@@ -192,8 +193,11 @@ def build_pilot(
         raise RuntimeError("Phase 8 requires pyarrow") from error
     input_path = input_path.resolve()
     output_path = output_path.resolve()
-    if input_path == output_path:
-        raise ValueError("pilot output must be distinct from split input")
+    validate_destinations(
+        {"input": input_path, "capacity_report": capacity_report_path, "config": config_path},
+        {"output": output_path, "json_report": report_json,
+         "markdown_report": report_markdown, "review_sample": review_sample_path},
+    )
     capacity = json.loads(capacity_report_path.resolve().read_text(encoding="utf-8"))
     input_sha256 = sha256_file(input_path)
     generator_sha256 = sha256_files((Path("src/geg/generators.py").resolve(), Path("src/geg/alignment.py").resolve()))
@@ -204,6 +208,8 @@ def build_pilot(
     current_config_hash = compute_config_hash(load_config(config_path.resolve()))
     if capacity.get("config_hash") != current_config_hash:
         raise RuntimeError("stale capacity report: config hash does not match; rerun Phase 6")
+    if not capacity.get("split_report_sha256") or not capacity.get("quality_manifest_sha256"):
+        raise RuntimeError("capacity report lacks upstream provenance; rerun Phases 5 and 6")
     if config_hash and config_hash != current_config_hash:
         raise RuntimeError("stale pilot configuration hash; regenerate dependent artifacts")
     config_hash = current_config_hash
@@ -216,11 +222,9 @@ def build_pilot(
         capacities_by_split[split] = {}
         for tag in tags:
             row = rows[tag]
-            # The census records total candidate positions and per-split
-            # eligible sentence counts. Use a conservative proportional cap.
-            sentences = max(int(row["eligible_clean_sentences"]), 1)
-            estimated = int(row["candidates"] * int(row.get(split, 0)) / sentences * 0.95)
-            capacities_by_split[split][tag] = max(0, estimated)
+            if "candidates_by_split" not in row:
+                raise RuntimeError("capacity report lacks per-split candidate counts; rerun Phase 6")
+            capacities_by_split[split][tag] = max(0, int(row["candidates_by_split"].get(split, 0)))
         quotas[split] = _allocate_quotas(capacities_by_split[split], target)
 
     import pyarrow.parquet as pq
@@ -284,14 +288,40 @@ def build_pilot(
             pair_key = (candidate.source_text, candidate.target_text)
             if pair_key in selected_pairs:
                 continue
-            selected_pairs.add(pair_key)
-            selected_by_split[split] += 1
-            selected_by_tag[(split, candidate.correction_tag)] += 1
             valid, reason, alignment = _structurally_valid(candidate)
             if not valid:
                 rejected[reason] += 1
                 continue
+            selected_pairs.add(pair_key)
+            selected_by_split[split] += 1
+            selected_by_tag[(split, candidate.correction_tag)] += 1
             selected.append(_record(clean, candidate, seed, config_hash, alignment))
+
+    # Collisions and structural rejections can exhaust a tag after the reserve
+    # is full. Rescan without quotas until each split is full or truly exhausted.
+    refill_performed = any(selected_by_split[s] < n for s, n in PILOT_TARGETS.items())
+    if refill_performed:
+        for batch in parquet.iter_batches(columns=columns):
+            for clean in batch.to_pylist():
+                split = str(clean["split"])
+                if split not in PILOT_TARGETS or selected_by_split[split] >= PILOT_TARGETS[split]:
+                    continue
+                for tag in tags:
+                    if selected_by_split[split] >= PILOT_TARGETS[split]:
+                        break
+                    for candidate in generate_candidates(str(clean["text"]), tag, compute_alignment=False).candidates:
+                        if selected_by_split[split] >= PILOT_TARGETS[split]:
+                            break
+                        pair_key = (candidate.source_text, candidate.target_text)
+                        if pair_key in selected_pairs:
+                            continue
+                        valid, reason, alignment = _structurally_valid(candidate)
+                        if not valid:
+                            continue
+                        selected_pairs.add(pair_key)
+                        selected_by_split[split] += 1
+                        selected_by_tag[(split, tag)] += 1
+                        selected.append(_record(clean, candidate, seed, config_hash, alignment))
 
     selected.sort(key=lambda row: (SPLIT_ORDER[row["split"]], row["correction_tags"][0], row["clean_id"], row["pair_id"]))
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -316,6 +346,9 @@ def build_pilot(
         "input_sha256": input_sha256,
         "capacity_report": str(capacity_report_path.resolve()),
         "capacity_report_sha256": capacity_report_sha256,
+        "split_report_sha256": capacity["split_report_sha256"],
+        "quality_manifest_sha256": capacity["quality_manifest_sha256"],
+        "refill_performed": refill_performed,
         "generator_version": GENERATOR_VERSION,
         "generator_sha256": generator_sha256,
         "pilot_builder_version": PILOT_BUILDER_VERSION,

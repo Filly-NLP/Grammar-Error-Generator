@@ -18,9 +18,11 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.geg.morphology import map_unimorph_features
+from src.geg.artifacts import validate_destinations
 
 
 def import_tsv(input_path: Path, output_path: Path, report_path: Path) -> dict[str, object]:
+    validate_destinations({"input": input_path}, {"output": output_path, "report": report_path})
     output_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.parent.mkdir(parents=True, exist_ok=True)
     counts: Counter[str] = Counter()

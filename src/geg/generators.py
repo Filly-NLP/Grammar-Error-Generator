@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 import string
+import unicodedata
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -20,7 +21,7 @@ from .tags import BalarilaTag, registry
 TOKEN_RE = re.compile(r"\S+")
 VOWELS = frozenset("aeiouáéíóúàèìòùâêîôûäëïöü")
 PUNCTUATION = frozenset(string.punctuation + "…“”‘’—–")
-GENERATOR_VERSION = "filly-generators-v2-alignment-replay"
+GENERATOR_VERSION = "filly-generators-v3-enclitic-context"
 
 # These are only conservative grammatical/function-word contexts. They are
 # intentionally not used for arbitrary content-word deletion/duplication.
@@ -180,15 +181,23 @@ def _enclitic(text: str, tag: BalarilaTag, compute_alignment: bool) -> Generatio
         previous = word_tokens[index - 1].core.lower()
         if not previous or not previous[-1].isalpha():
             continue
-        previous_is_vowel = previous[-1] in VOWELS
+        phonological = "".join(c for c in unicodedata.normalize("NFD", previous)
+                               if not unicodedata.combining(c))
+        previous_is_vowel = phonological[-1] in "aeiou"
+        previous_is_glide = phonological[-1] in "wy"
+        # Traditional din/rin and daw/raw exceptions (KWF manual, section 8.1).
+        exception = desired in {"din", "rin", "daw", "raw"} and phonological.endswith(("ri", "ra", "raw", "ray"))
+        expects_r_form = (previous_is_vowel or previous_is_glide) and not exception
         target_is_d_form = desired.startswith("d")
-        if target_is_d_form != (not previous_is_vowel):
+        if target_is_d_form == expects_r_form:
             continue
         wrong = ENCLITIC_PAIRS[desired]
         source_surface = token.prefix + wrong + token.suffix
         result.append(_candidate(text, token, _replace_token(text, token, wrong), tag, {
             "type": "replace", "correct": desired, "generated_wrong": wrong,
-            "previous_token": previous, "previous_final_class": "vowel" if previous_is_vowel else "consonant",
+            "previous_token": previous,
+            "previous_final_class": "glide" if previous_is_glide else "vowel" if previous_is_vowel else "consonant",
+            "enclitic_exception": exception,
             "target_start": token.start, "target_end": token.end,
             "target_surface": token.text, "source_start": token.start,
             "source_end": token.start + len(source_surface), "source_surface": source_surface,

@@ -15,6 +15,7 @@ from src.geg.generators import GENERATOR_VERSION, all_tag_ids, generate_candidat
 from src.geg.config import config_hash, load_config
 from src.geg.hashing import sha256_file, sha256_files
 from src.geg.tags import registry
+from src.geg.artifacts import validate_destinations, verify_manifest
 
 
 def _write_json(path: Path, value: object) -> None:
@@ -57,19 +58,28 @@ def build_report(
     report_json: Path,
     report_markdown: Path,
     config_path: Path = Path("config/filly.yaml"),
+    split_report: Path = Path("reports/base_split_report.json"),
 ) -> dict[str, object]:
     try:
         import pyarrow.parquet as pq
     except ImportError as error:
         raise RuntimeError("Phase 6 requires pyarrow") from error
     input_path = input_path.resolve()
+    validate_destinations(
+        {"input": input_path, "config": config_path, "split_report": split_report},
+        {"json_report": report_json, "markdown_report": report_markdown},
+    )
     config_digest = config_hash(load_config(config_path.resolve()))
+    provenance = verify_manifest(split_report, input_path, config_digest)
+    if not provenance.get("quality_manifest_sha256"):
+        raise RuntimeError("split report lacks quality provenance; rerun Phase 5")
     parquet = pq.ParquetFile(input_path)
     rows_by_tag = {
         tag_id: {
             "sentences": defaultdict(int),
             "positions": 0,
             "candidates": 0,
+            "candidates_by_split": defaultdict(int),
             "status": None,
             "reason": None,
         }
@@ -91,6 +101,7 @@ def build_report(
                     bucket["sentences"][str(split)] += 1
                     bucket["positions"] += len(result.candidates)
                     bucket["candidates"] += len(result.candidates)
+                    bucket["candidates_by_split"][str(split)] += len(result.candidates)
 
     tags = []
     metadata = {item.id: item for item in registry()}
@@ -106,6 +117,7 @@ def build_report(
             "eligible_clean_sentences": sum(bucket["sentences"].values()),
             "positions": bucket["positions"],
             "candidates": bucket["candidates"],
+            "candidates_by_split": dict(bucket["candidates_by_split"]),
             "reason": bucket["reason"] or "",
         })
     report: dict[str, object] = {
@@ -114,6 +126,8 @@ def build_report(
         "input_sha256": sha256_file(input_path),
         "config_path": str(config_path.resolve()),
         "config_hash": config_digest,
+        "split_report_sha256": sha256_file(split_report),
+        "quality_manifest_sha256": provenance["quality_manifest_sha256"],
         "generator_version": GENERATOR_VERSION,
         "generator_sha256": sha256_files((Path("src/geg/generators.py").resolve(), Path("src/geg/alignment.py").resolve())),
         "input_rows": input_rows,
@@ -134,8 +148,9 @@ def main() -> None:
     parser.add_argument("--json", type=Path, default=Path("reports/tag_capacity_report.json"))
     parser.add_argument("--markdown", type=Path, default=Path("reports/TAG_CAPACITY_REPORT.md"))
     parser.add_argument("--config", type=Path, default=Path("config/filly.yaml"))
+    parser.add_argument("--split-report", type=Path, default=Path("reports/base_split_report.json"))
     args = parser.parse_args()
-    report = build_report(args.input, args.json, args.markdown, args.config)
+    report = build_report(args.input, args.json, args.markdown, args.config, args.split_report)
     print(json.dumps({"status": report["status"], "input_rows": report["input_rows"], "tag_count": report["tag_count"]}, indent=2))
 
 

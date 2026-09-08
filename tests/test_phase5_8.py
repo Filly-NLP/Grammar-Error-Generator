@@ -40,7 +40,7 @@ class GeneratorTests(unittest.TestCase):
         candidate = self._find("Pumunta ako rin.", "$REPLACE_rin")
         self.assertEqual("Pumunta ako din.", candidate.source_text)
         self.assertEqual("vowel", candidate.generation_operation["previous_final_class"])
-        self.assertFalse(generate_candidates("Pumunta bahay rin.", "$REPLACE_rin").candidates)
+        self.assertFalse(generate_candidates("Aalis rin.", "$REPLACE_rin").candidates)
 
     def test_punctuation_and_pronoun_direction(self) -> None:
         punctuation = self._find("Maayos.", "$ADD_PUNC_PERIOD")

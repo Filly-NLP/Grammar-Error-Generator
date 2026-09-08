@@ -29,3 +29,32 @@ The report records hashes for the split input, capacity report, generator
 sources, configuration, and pilot output. Automated structural review is
 complete; human linguistic review is pending. The pilot is not claimed as
 reviewed or production-ready.
+
+## Review fixes and regeneration (2026-09-08)
+
+All builder outputs, reports, and review-sample destinations must be distinct
+from each other and from their inputs/configuration. Existing hard-link and
+symlink aliases are rejected before writing.
+
+Phase 5 now requires the Phase 4 run manifest (`--quality-manifest`, default
+`reports/run_manifest.json`) with a matching configuration and validated-data
+hash. Phase 6 requires the Phase 5 report (`--split-report`, default
+`reports/base_split_report.json`) with a matching configuration, split-data
+hash, and quality-manifest provenance. Their manifest hashes propagate into
+the census and pilot reports. Supply these flags for custom artifact locations.
+
+The census records `candidates_by_split` for each tag. Pilot quotas use these
+counts directly. If structural rejection or pair collisions exhaust the
+bounded overflow reserve, a deterministic second scan fills the remaining
+slots without tag quotas. A genuine shortage still produces `status=shortfall`;
+`refill_performed` records whether the second scan was needed.
+
+Generator hashes now use repository-relative filenames and contents. Moving
+a checkout does not change this hash. The new hash format, changed enclitic
+rules, and changed formality configuration invalidate earlier artifacts.
+Regenerate phases 4, 5, 6, and 8 in that order using the source database before
+using the new pilot. Old reports must not be relabeled with new hashes.
+
+The source database and production Parquet artifacts were unavailable during
+this implementation; validation used disposable fixtures. Human linguistic
+review is still required before Phase 9.

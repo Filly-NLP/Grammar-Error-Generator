@@ -24,6 +24,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.geg.config import config_hash, load_config
+from src.geg.artifacts import validate_destinations
 from src.geg.ingest import (
     RejectedSentence,
     SentenceRecord,
@@ -299,11 +300,10 @@ def export(
     if run_manifest is None:
         run_manifest = Path("reports/run_manifest.json")
     artifact_paths = _clean_paths(base_output, validated_output, quarantine)
-    report_paths = {quality_report.resolve(), run_manifest.resolve()}
+    destinations = {**artifact_paths, "quality_report": quality_report, "run_manifest": run_manifest}
     if integrity_report is not None:
-        report_paths.add(integrity_report.resolve())
-    if database in set(artifact_paths.values()) | report_paths:
-        raise ValueError("source SQLite database cannot be an output path")
+        destinations["integrity_report"] = integrity_report
+    validate_destinations({"database": database, "config": config_path}, destinations)
 
     database_hash = _sha256_file(database)
     connection = connect_read_only(database)

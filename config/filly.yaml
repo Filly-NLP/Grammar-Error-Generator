@@ -113,8 +113,8 @@
     ],
     "check_formality": true,
     "formality_patterns": [
-      "(?i)(^|\\s)(lol|lmao|omg|hahaha+|hehe+)(\\s|$)",
-      "(?i)(^|\\s)(xd|wla|d2|aq)(\\s|$)"
+      "(?i)(?<!\\w)(lol|lmao|omg|hahaha+|hehe+)(?!\\w)",
+      "(?i)(?<!\\w)(xd|wla|d2|aq)(?!\\w)"
     ],
     "reject_urls_and_email": true
   }
