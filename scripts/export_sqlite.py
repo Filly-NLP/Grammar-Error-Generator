@@ -193,15 +193,18 @@ def _write_parquet(
             if max_rows is not None and index >= max_rows:
                 break
             input_rows += 1
-            batches.setdefault("base_sentences", []).append(_record_dict(row_to_candidate(row)))
+            if "base_sentences" in batches:
+                batches["base_sentences"].append(_record_dict(row_to_candidate(row)))
             result = validate_row(row, quality_rules=quality_rules)
             if isinstance(result, SentenceRecord):
                 validated_rows += 1
-                batches.setdefault("validated_clean", []).append(_record_dict(result))
+                if "validated_clean" in batches:
+                    batches["validated_clean"].append(_record_dict(result))
             else:
                 quarantined_rows += 1
                 counts.update(result.reason_codes)
-                batches.setdefault("quarantined_clean", []).append(_reject_dict(result))
+                if "quarantined_clean" in batches:
+                    batches["quarantined_clean"].append(_reject_dict(result))
             if sum(len(rows) for rows in batches.values()) >= fetch_size:
                 flush()
         flush()
@@ -327,6 +330,11 @@ def export(
         )
         raise
 
+    artifact_hashes = {
+        name: _sha256_file(path)
+        for name, path in artifact_paths.items()
+        if path.exists()
+    }
     quality_payload: dict[str, object] = {
         "status": "complete",
         "rows_exported": summary["validated_rows"],
@@ -339,6 +347,9 @@ def export(
         "uniqueness_assertion_result": uniqueness,
         "near_deduplication_performed": False,
         "source_read_only": True,
+        "input_sqlite_sha256": database_hash,
+        "config_hash": config_digest,
+        "artifact_hashes": artifact_hashes,
     }
     _write_json(quality_report, quality_payload)
     manifest: dict[str, object] = {
@@ -359,6 +370,7 @@ def export(
         "format": output_format,
         "artifacts": {name: str(path) for name, path in artifact_paths.items()},
         "quality_report": str(quality_report.resolve()),
+        "artifact_hashes": artifact_hashes,
     }
     _write_json(run_manifest, manifest)
     if integrity_report is not None:
@@ -375,6 +387,7 @@ def export(
             "artifacts": manifest["artifacts"],
             "quality_report": str(quality_report.resolve()),
             "run_manifest": str(run_manifest.resolve()),
+            "artifact_hashes": artifact_hashes,
         })
     return {
         "quality_report": quality_payload,
@@ -419,7 +432,10 @@ def main() -> None:
             integrity_report=args.integrity_report,
             config_path=args.config,
         )
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    # Windows PowerShell may expose a cp1252 stdout; reports can contain
+    # quarantined replacement characters. Keep the CLI itself encodable while
+    # preserving UTF-8 in all artifact files.
+    print(json.dumps(result, ensure_ascii=True, indent=2))
 
 
 if __name__ == "__main__":

@@ -9,7 +9,15 @@ from pathlib import Path
 
 from scripts.export_sqlite import export
 from scripts.import_unimorph_tgl import import_tsv
-from src.geg.ingest import assert_unique_normalized_text, connect_read_only, normalize_text
+from src.geg.ingest import (
+    RejectedSentence,
+    assert_unique_normalized_text,
+    connect_read_only,
+    iter_sentence_rows,
+    normalize_text,
+    row_to_candidate,
+    validate_row,
+)
 from src.geg.morphology import map_unimorph_features
 from src.geg.states import state_by_id, states
 from src.geg.tags import registry, require_registered
@@ -69,7 +77,14 @@ class IngestTests(unittest.TestCase):
                 raise AssertionError(f"test mutated repository report: {path}")
         super().tearDownClass()
 
-    def _fixture(self, duplicate: bool = False) -> Path:
+    def _fixture(
+        self,
+        duplicate: bool = False,
+        language: str = "FILIPINO",
+        confidence: float = 0.99,
+        sentence_text: str = "  Kumusta\nsa mundo! ",
+        normalized_text: str = "Kumusta sa mundo!",
+    ) -> Path:
         handle = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
         handle.close()
         path = Path(handle.name)
@@ -94,7 +109,7 @@ class IngestTests(unittest.TestCase):
         connection.execute("INSERT INTO sources VALUES ('s1','Test Publisher','test.example')")
         connection.execute("INSERT INTO articles VALUES ('a1','s1','https://example.test/a',NULL,'2026-01-01','Headline')")
         rows = [
-            ('x1', 'a1', 's1', 0, 0, '  Kumusta\nsa mundo! ', 'Kumusta sa mundo!', 'fil', 0.99, 3, 1.0, 0, 0, 'h1', 0, None, 'now'),
+            ('x1', 'a1', 's1', 0, 0, sentence_text, normalized_text, language, confidence, 3, 1.0, 0, 0, 'h1', 0, None, 'now'),
         ]
         if duplicate:
             rows.append(('x2', 'a1', 's1', 1, 0, 'Other', 'Kumusta sa mundo!', 'fil', 0.99, 3, 1.0, 0, 0, 'h2', 0, None, 'now'))
@@ -114,6 +129,16 @@ class IngestTests(unittest.TestCase):
         finally:
             connection.close()
 
+    def test_staging_preserves_sentence_text_casing(self) -> None:
+        path = self._fixture()
+        connection = connect_read_only(path)
+        try:
+            row = next(iter_sentence_rows(connection, 1))
+            candidate = row_to_candidate(row)
+            self.assertEqual("Kumusta sa mundo!", candidate.text)
+        finally:
+            connection.close()
+
     def test_duplicate_contract_is_detected(self) -> None:
         path = self._fixture(duplicate=True)
         connection = connect_read_only(path)
@@ -121,6 +146,101 @@ class IngestTests(unittest.TestCase):
             result = assert_unique_normalized_text(connection)
             self.assertFalse(result["passed"])
             self.assertEqual(1, result["duplicate_rows"])
+        finally:
+            connection.close()
+
+    def test_quality_gates_quarantine_reason_codes(self) -> None:
+        path = self._fixture(
+            language="ENGLISH",
+            confidence=0.50,
+            sentence_text='Kumusta ' + chr(0xFFFD) + ' mundo ("',
+            normalized_text='Kumusta ' + chr(0xFFFD) + ' mundo ("',
+        )
+        connection = connect_read_only(path)
+        try:
+            row = next(iter_sentence_rows(connection, 1))
+            result = validate_row(row, quality_rules={
+                "required_language": "FILIPINO",
+                "min_language_confidence": 0.80,
+                "check_balanced_delimiters": True,
+                "reject_suspicious_encoding": True,
+            })
+            self.assertIsInstance(result, RejectedSentence)
+            self.assertTrue({
+                "language_mismatch", "low_language_confidence", "unbalanced_bracket",
+                "unbalanced_quote", "suspicious_encoding",
+            }.issubset(set(result.reason_codes)))
+        finally:
+            connection.close()
+
+    def test_code_switch_ratio_is_conservative_and_reason_coded(self) -> None:
+        heavy = self._fixture(
+            sentence_text="The plan is in the city and it is for the people.",
+            normalized_text="The plan is in the city and it is for the people.",
+        )
+        connection = connect_read_only(heavy)
+        try:
+            result = validate_row(next(iter_sentence_rows(connection, 1)))
+            self.assertIsInstance(result, RejectedSentence)
+            self.assertIn("language_code_switch_ratio", result.reason_codes)
+        finally:
+            connection.close()
+
+        reviewer_sentence = self._fixture(
+            sentence_text=(
+                "And to hold them responsible sa lahat ng epektong idinulot nito "
+                "sa climate change ng ating bansang Pilipinas."
+            ),
+            normalized_text=(
+                "And to hold them responsible sa lahat ng epektong idinulot nito "
+                "sa climate change ng ating bansang Pilipinas."
+            ),
+        )
+        connection = connect_read_only(reviewer_sentence)
+        try:
+            result = validate_row(next(iter_sentence_rows(connection, 1)))
+            self.assertIsInstance(result, RejectedSentence)
+            self.assertIn("language_code_switch_clause", result.reason_codes)
+        finally:
+            connection.close()
+
+        borderline = self._fixture(
+            sentence_text="The plan is for the city and local teams.",
+            normalized_text="The plan is for the city and local teams.",
+        )
+        connection = connect_read_only(borderline)
+        try:
+            result = validate_row(next(iter_sentence_rows(connection, 1)))
+            self.assertIsInstance(result, RejectedSentence)
+            self.assertIn("language_code_switch_borderline", result.reason_codes)
+        finally:
+            connection.close()
+
+        borrowed = self._fixture(
+            sentence_text="Naglaro ang football team sa National Stadium kahapon.",
+            normalized_text="Naglaro ang football team sa National Stadium kahapon.",
+        )
+        connection = connect_read_only(borrowed)
+        try:
+            result = validate_row(next(iter_sentence_rows(connection, 1)))
+            self.assertNotIsInstance(result, RejectedSentence)
+        finally:
+            connection.close()
+
+    def test_encoding_gate_requires_validated_multi_character_sequence(self) -> None:
+        accented = self._fixture(sentence_text="Jos" + chr(0xE9) + " ang coach.", normalized_text="Jos" + chr(0xE9) + " ang coach.")
+        connection = connect_read_only(accented)
+        try:
+            self.assertNotIsInstance(validate_row(next(iter_sentence_rows(connection, 1))), RejectedSentence)
+        finally:
+            connection.close()
+
+        mojibake = self._fixture(sentence_text="Jos" + chr(0xC3) + chr(0xA9) + " ang coach.", normalized_text="Jos" + chr(0xC3) + chr(0xA9) + " ang coach.")
+        connection = connect_read_only(mojibake)
+        try:
+            result = validate_row(next(iter_sentence_rows(connection, 1)))
+            self.assertIsInstance(result, RejectedSentence)
+            self.assertIn("suspicious_encoding", result.reason_codes)
         finally:
             connection.close()
 
@@ -138,6 +258,56 @@ class IngestTests(unittest.TestCase):
             self.assertEqual("x1", record["clean_id"])
             self.assertEqual("a1", record["source_doc_id"])
             self.assertEqual(before, hashlib.sha256(path.read_bytes()).hexdigest())
+
+    def test_legacy_parquet_export_does_not_require_base_writer(self) -> None:
+        import pyarrow.parquet as pq
+
+        path = self._fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            result = export(
+                path, root / "clean.parquet", root / "quarantine.parquet", root / "report.json",
+                "parquet", 1, None, run_manifest=root / "manifest.json",
+            )
+            self.assertEqual(1, result["rows_exported"])
+            self.assertEqual(2, len(result["run_manifest"]["artifact_hashes"]))
+            table = pq.read_table(root / "clean.parquet")
+            self.assertEqual("Kumusta sa mundo!", table["text"][0].as_py())
+
+    def test_legacy_parquet_export_allows_quarantine_none(self) -> None:
+        path = self._fixture(language="ENGLISH", confidence=0.99)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            result = export(
+                path, root / "clean.parquet", None, root / "report.json",
+                "parquet", 1, None, run_manifest=root / "manifest.json",
+            )
+            self.assertEqual(0, result["rows_exported"])
+            self.assertEqual(1, result["rows_quarantined"])
+            self.assertTrue((root / "clean.parquet").exists())
+
+    def test_production_parquet_export_writes_all_artifacts(self) -> None:
+        import pyarrow.parquet as pq
+
+        path = self._fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            result = export(
+                path,
+                output_format="parquet",
+                fetch_size=1,
+                base_output=root / "base.parquet",
+                validated_output=root / "validated.parquet",
+                quarantine=root / "quarantine.parquet",
+                quality_report=root / "quality.json",
+                run_manifest=root / "manifest.json",
+                integrity_report=root / "integrity.json",
+            )
+            self.assertEqual(1, result["rows_exported"])
+            self.assertEqual(3, len(result["run_manifest"]["artifact_hashes"]))
+            self.assertEqual("Kumusta sa mundo!", pq.read_table(root / "validated.parquet")["text"][0].as_py())
+            self.assertEqual(1, pq.read_table(root / "base.parquet").num_rows)
+            self.assertEqual(0, pq.read_table(root / "quarantine.parquet").num_rows)
 
     def test_export_fails_before_writing_on_duplicate_contract_violation(self) -> None:
         path = self._fixture(duplicate=True)

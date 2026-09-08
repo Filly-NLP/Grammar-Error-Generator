@@ -13,12 +13,17 @@
   "source_read_only": true,
   "near_deduplication_performed": false,
   "config_path": "D:\\files\\Online Classes\\College\\4th Year\\random\\Grammar-Error-Generator\\config\\filly.yaml",
-  "config_hash": "d935d0a2a0a881a42337e6602337e33d7416f73b5d85d661f6caef95d3e00fb4",
+  "config_hash": "f927575f4bfee486e881bea2e8c007b35197ba9536c1d34e4e26ba323ccc69a8",
   "artifacts": {
     "base_sentences": "D:\\files\\Online Classes\\College\\4th Year\\random\\Grammar-Error-Generator\\data\\interim\\base_sentences.parquet",
     "validated_clean": "D:\\files\\Online Classes\\College\\4th Year\\random\\Grammar-Error-Generator\\data\\interim\\validated_clean.parquet",
     "quarantined_clean": "D:\\files\\Online Classes\\College\\4th Year\\random\\Grammar-Error-Generator\\data\\interim\\quarantined_clean.parquet"
   },
   "quality_report": "D:\\files\\Online Classes\\College\\4th Year\\random\\Grammar-Error-Generator\\reports\\quality_report.json",
-  "run_manifest": "D:\\files\\Online Classes\\College\\4th Year\\random\\Grammar-Error-Generator\\reports\\run_manifest.json"
+  "run_manifest": "D:\\files\\Online Classes\\College\\4th Year\\random\\Grammar-Error-Generator\\reports\\run_manifest.json",
+  "artifact_hashes": {
+    "base_sentences": "930b3fb3e301586695ffa0f23f456df25e8197881394ff6ac093a4d87430f3e3",
+    "validated_clean": "b0f8fd95f79b4cc8013f3a9705d3c1a663a68daaffd9f6680eb6912e7bd979a8",
+    "quarantined_clean": "906542d7b56f55df205987343b968070594ece774e0a01aece6630f467dcab29"
+  }
 }

@@ -40,7 +40,7 @@ The immutable export maps each sentence to the following traceable record:
 | Staging field | SQLite source |
 |---|---|
 | `clean_id` | `sentences.sentence_id` |
-| `text` | `sentences.normalized_text` (Unicode/whitespace-normalized at export) |
+| `text` | `sentences.sentence_text` (NFC/whitespace-normalized at export; casing preserved) |
 | `source_corpus` | constant `sentence-pair-scraper` |
 | `publisher` | `sources.name` with `sources.domain` fallback |
 | `source_doc_id` | `sentences.article_id` |
@@ -54,6 +54,9 @@ The primary corpus is treated as an upstream-deduplicated contract. FILLY
 performs only a non-mutating normalized-text uniqueness assertion and fails
 before staging if that assertion finds duplicates. No near-deduplication pass
 is present in the Phase 4 exporter.
+
+The `normalized_text` column is used only for this integrity assertion and its
+stable hash. It is not used as the gold target surface and is never rewritten.
 
 The live Phase 0 assertion passed: all 517,342 normalized-text values were
 distinct and no source row was marked as an upstream duplicate. The input
