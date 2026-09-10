@@ -2,34 +2,67 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "FILLY end-to-end evaluation item",
   "type": "object",
-  "required": ["sample_id", "raw_informal", "gold_normalized_errorful", "gold_final_correct", "normalization_edits", "grammar_tags", "grammar_edits", "source_type", "provenance", "annotator_1", "annotator_2", "adjudication_status", "split"],
+  "required": ["sample_id", "raw_informal", "gold_normalized_errorful", "gold_final_correct", "normalization_edits", "grammar_tags", "grammar_edits", "provenance", "annotator_1", "annotator_2", "adjudication_status", "notes", "split"],
   "properties": {
     "sample_id": {"type": "string", "minLength": 1},
     "raw_informal": {"type": "string", "minLength": 1},
     "gold_normalized_errorful": {"type": "string", "minLength": 1},
     "gold_final_correct": {"type": "string", "minLength": 1},
     "normalization_types": {"type": "array", "items": {"type": "string"}},
-    "normalization_edits": {"type": "array"},
+    "normalization_edits": {"type": "array", "items": {"type": "object", "required": ["start", "end", "source", "target", "rule_id", "pattern_id", "seen_status"], "properties": {"start": {"type": "integer", "minimum": 0}, "end": {"type": "integer", "minimum": 0}, "source": {"type": "string"}, "target": {"type": "string"}, "rule_id": {"type": "string", "minLength": 1}, "pattern_id": {"type": "string", "minLength": 1}, "seen_status": {"enum": ["seen_rule", "unseen_pattern"]}}}},
     "grammar_tags": {"type": "array", "items": {"type": "string"}},
-    "grammar_edits": {"type": "array"},
+    "grammar_families": {"type": "array", "items": {"type": "string"}},
+    "error_families": {"type": "array", "items": {"type": "string"}},
+    "grammar_edits": {"type": "array", "items": {"type": "object", "required": ["start", "end", "source", "target", "tag"], "properties": {"start": {"type": "integer", "minimum": 0}, "end": {"type": "integer", "minimum": 0}, "source": {"type": "string"}, "target": {"type": "string"}, "tag": {"type": "string", "minLength": 1}}}},
     "source_type": {"enum": ["authentic", "controlled", "clean_control"]},
+    "real_or_controlled": {"enum": ["real", "controlled"]},
     "base_clean_id": {"type": ["string", "null"]},
     "provenance": {"type": "object", "required": ["source_id", "source_type", "license", "attribution", "captured_at"]},
     "annotator_1": {"type": "string", "minLength": 1},
     "annotator_2": {"type": "string", "minLength": 1},
     "adjudication_status": {"type": "string", "minLength": 1},
-    "normalization_rule_id": {"type": "string"},
+    "notes": {"type": "string"},
+    "normalization_rule_id": {"type": "string", "minLength": 1},
+    "normalization_rule_ids": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "normalization_pattern_id": {"type": "string", "minLength": 1},
+    "normalization_pattern_ids": {"type": "array", "items": {"type": "string", "minLength": 1}},
     "normalization_rule_seen_status": {"enum": ["seen_rule", "unseen_pattern"]},
     "split": {"const": "test_only"}
   },
   "allOf": [
+    {"anyOf": [{"required": ["grammar_families"]}, {"required": ["error_families"]}]},
+    {"anyOf": [{"required": ["source_type"]}, {"required": ["real_or_controlled"]}]},
     {
-      "if": {"properties": {"source_type": {"enum": ["authentic", "controlled"]}}},
-      "then": {"required": ["normalization_types", "normalization_rule_id", "normalization_rule_seen_status"]}
+      "if": {"required": ["error_families"]},
+      "then": {"properties": {"error_families": {"type": "array", "items": {"type": "string"}}}}
     },
     {
-      "if": {"properties": {"source_type": {"const": "controlled"}}},
+      "if": {"required": ["source_type"], "properties": {"source_type": {"enum": ["authentic", "controlled"]}}},
+      "then": {"required": ["normalization_types", "normalization_rule_id", "normalization_rule_ids", "normalization_pattern_id", "normalization_pattern_ids", "normalization_rule_seen_status"], "properties": {"normalization_types": {"minItems": 1}, "normalization_edits": {"minItems": 1}, "grammar_edits": {"minItems": 1}}}
+    },
+    {
+      "if": {"required": ["source_type"], "properties": {"source_type": {"const": "authentic"}}},
+      "then": {"required": ["real_or_controlled"], "properties": {"real_or_controlled": {"const": "real"}}}
+    },
+    {
+      "if": {"required": ["source_type"], "properties": {"source_type": {"const": "controlled"}}},
+      "then": {"required": ["real_or_controlled", "base_clean_id"], "properties": {"real_or_controlled": {"const": "controlled"}, "base_clean_id": {"type": "string", "minLength": 1}}}
+    },
+    {
+      "if": {"required": ["source_type"], "properties": {"source_type": {"const": "clean_control"}}},
+      "then": {"required": ["real_or_controlled"], "properties": {"real_or_controlled": {"const": "controlled"}, "normalization_types": {"const": []}, "normalization_edits": {"const": []}, "grammar_tags": {"const": []}, "grammar_families": {"const": []}, "error_families": {"const": []}, "grammar_edits": {"const": []}}}
+    },
+    {
+      "if": {"required": ["real_or_controlled"], "properties": {"real_or_controlled": {"const": "controlled"}}},
       "then": {"required": ["base_clean_id"]}
+    },
+    {
+      "if": {"required": ["real_or_controlled"], "properties": {"real_or_controlled": {"const": "controlled"}}, "not": {"required": ["source_type"]}},
+      "then": {"required": ["normalization_types", "normalization_rule_id", "normalization_rule_ids", "normalization_pattern_id", "normalization_pattern_ids", "normalization_rule_seen_status"], "properties": {"normalization_types": {"minItems": 1}, "normalization_edits": {"minItems": 1}, "grammar_edits": {"minItems": 1}}}
+    },
+    {
+      "if": {"required": ["real_or_controlled"], "properties": {"real_or_controlled": {"const": "real"}}},
+      "then": {"required": ["normalization_types", "normalization_rule_id", "normalization_rule_ids", "normalization_pattern_id", "normalization_pattern_ids", "normalization_rule_seen_status"], "properties": {"normalization_types": {"minItems": 1}, "normalization_edits": {"minItems": 1}, "grammar_edits": {"minItems": 1}}}
     }
   ]
 }

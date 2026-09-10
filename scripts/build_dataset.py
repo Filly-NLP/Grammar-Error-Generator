@@ -220,7 +220,7 @@ def _iter_candidate_rows(paths: list[Path]) -> Iterable[dict[str, Any]]:
                     yield row
 
 
-def _identity_row(clean: dict[str, Any], seed: int) -> dict[str, Any]:
+def _identity_row(clean: dict[str, Any], seed: int, config_hash: str) -> dict[str, Any]:
     text = str(clean["text"])
     return {
         "pair_id": _identity_pair_id(seed, str(clean["clean_id"])),
@@ -247,7 +247,7 @@ def _identity_row(clean: dict[str, Any], seed: int) -> dict[str, Any]:
         "generator_version": None,
         "candidate_builder_version": None,
         "dataset_builder_version": DATASET_BUILDER_VERSION,
-        "config_hash": None,
+        "config_hash": config_hash,
         "alignment_success": True,
         "quality_flags": json.dumps(["identity_row"], ensure_ascii=False),
         "confidence": "gold_identity",
@@ -528,7 +528,7 @@ def build_final_dataset(
             if len(clean_by_split[split]) < split_identity[split]:
                 raise RuntimeError(f"identity capacity shortfall in {split}: {len(clean_by_split[split])} < {split_identity[split]}")
             ordered = sorted(clean_by_split[split], key=lambda row: str(row["clean_id"]))
-            identities[split] = [_identity_row(clean, seed) for clean in ordered[: split_identity[split]]]
+            identities[split] = [_identity_row(clean, seed, current_config_hash) for clean in ordered[: split_identity[split]]]
             for row in identities[split]:
                 validate_identity_row(row, split)
 

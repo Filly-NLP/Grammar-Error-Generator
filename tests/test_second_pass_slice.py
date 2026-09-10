@@ -102,9 +102,9 @@ def test_freeze_load_generate_replay_fixture_covers_target_states_and_constructi
     construction_data = [
         ("pag-aaral", "pag aaral", "$MERGE_HYPHEN", "hyphen"),
         ("araw-araw", "araw araw", "$TRANSFORM_INSERT_HYPHEN", "hyphen"),
-        ("ika-apat", "ika apat", "$TRANSFORM_SPLIT_HYPHEN", "hyphen"),
-        ("pag aaral", "pag-aaral", "$MERGE_SPACE", "space"),
-        ("araw-araw", "araw araw", "$TRANSFORM_SPLIT_SPACE", "space"),
+        ("ika apat", "ika-apat", "$TRANSFORM_SPLIT_HYPHEN", "hyphen"),
+        ("pa rin", "parin", "$MERGE_SPACE", "space"),
+        ("pinakamalaki", "pinaka malaki", "$TRANSFORM_SPLIT_SPACE", "space"),
     ]
     construction_input = tmp_path / "constructions.jsonl"
     construction_input.write_text("".join(json.dumps({

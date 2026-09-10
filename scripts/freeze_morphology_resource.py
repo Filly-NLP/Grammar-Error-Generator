@@ -11,6 +11,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.geg.resource_freeze import freeze_morphology
+from src.geg.config import config_hash, load_config, resolve_runtime_config
 
 
 def main() -> None:
@@ -25,18 +26,29 @@ def main() -> None:
     parser.add_argument("--license", required=True)
     parser.add_argument("--mapping-rule-version", required=True)
     parser.add_argument("--mapping-rule-artifact", type=Path, required=True)
-    parser.add_argument("--minimum-validated-states", type=int, default=3)
+    parser.add_argument("--minimum-validated-states", type=int)
+    parser.add_argument("--config", type=Path, default=Path("config/filly.yaml"))
     parser.add_argument("--resource-version", default="tagalog-verb-paradigms-v1")
     args = parser.parse_args()
+    loaded_config = load_config(args.config)
+    runtime = resolve_runtime_config(loaded_config)
+    minimum_states = args.minimum_validated_states
+    if minimum_states is None:
+        minimum_states = int(runtime["runtime"]["minimum_validated_states_per_lemma"])
+    overrides = {"minimum_validated_states_per_lemma": minimum_states} if args.minimum_validated_states is not None else {}
     result = freeze_morphology(
         args.input, args.resource, args.manifest,
         reviewer=args.reviewer, reviewed_at=args.reviewed_at,
         source_resource=args.source_resource, source_version=args.source_version,
         license_text=args.license, mapping_rule_version=args.mapping_rule_version,
         mapping_rule_artifact=args.mapping_rule_artifact,
-        minimum_validated_states=args.minimum_validated_states,
+        minimum_validated_states=minimum_states,
         resource_version=args.resource_version,
+        effective_config_hash=config_hash(loaded_config),
+        effective_config=runtime.get("runtime", {}),
+        cli_overrides=overrides,
     )
+    result["minimum_validated_states_per_lemma"] = minimum_states
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 

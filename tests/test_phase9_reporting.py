@@ -142,7 +142,7 @@ def test_candidate_aggregate_validates_complete_set_hashes_and_dependencies(tmp_
         manifest = shard.with_suffix(".manifest.json")
         payload = {
             "status": "complete", "output": str(shard), "output_sha256": sha256_file(shard),
-            "shard_index": index, "shard_count": 2, "production_ready": True,
+            "shard_index": index, "shard_count": 2, "production_ready": False,
             "capacity_report_sha256": "capacity", "config_hash": "config",
             "quality_manifest_sha256": "quality", "split_report_sha256": "split",
             "input_sqlite_sha256": "sqlite", "review_manifest_sha256": "review",
@@ -156,13 +156,14 @@ def test_candidate_aggregate_validates_complete_set_hashes_and_dependencies(tmp_
         }
         manifest.write_text(json.dumps(payload), encoding="utf-8")
         manifests.append(manifest)
-    aggregate = aggregate_candidate_manifests(manifests, tmp_path / "aggregate.json", required_by_split={"train": 2})
+    aggregate = aggregate_candidate_manifests(manifests, tmp_path / "aggregate.json", required_by_split={"train": 2}, allow_development=True)
     assert aggregate["phase10_capacity_adequate"]
-    validated = validate_candidate_aggregate(tmp_path / "aggregate.json", [tmp_path / "shard-0.parquet", tmp_path / "shard-1.parquet"], required_by_split={"train": 2})
-    assert validated["aggregate_sha256"] == aggregate["aggregate_sha256"]
+    assert aggregate["production_ready"] is False
+    with pytest.raises(RuntimeError, match="non-production"):
+        validate_candidate_aggregate(tmp_path / "aggregate.json", [tmp_path / "shard-0.parquet", tmp_path / "shard-1.parquet"], required_by_split={"train": 2})
     (tmp_path / "shard-1.parquet").write_bytes(b"tampered")
     with pytest.raises(RuntimeError, match="output hash"):
-        aggregate_candidate_manifests(manifests, tmp_path / "aggregate-2.json")
+        aggregate_candidate_manifests(manifests, tmp_path / "aggregate-2.json", allow_development=True)
 
 
 def test_candidate_aggregate_does_not_overwrite_external_winner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -182,6 +183,10 @@ def test_candidate_aggregate_does_not_overwrite_external_winner(tmp_path: Path, 
         "tag_counts": {"$ADD_PUNC_PERIOD": 1}, "candidate_rows": 1, "buffer_rows": 1,
     }
     manifest.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(RuntimeError, match="require exactly one shared candidate plan"):
+        aggregate_candidate_manifests([manifest])
+    payload["production_ready"] = False
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
     aggregate_path = tmp_path / "aggregate.json"
     import scripts.build_candidates as builder
     original_link = builder.os.link
@@ -192,7 +197,7 @@ def test_candidate_aggregate_does_not_overwrite_external_winner(tmp_path: Path, 
 
     monkeypatch.setattr(builder.os, "link", winner)
     with pytest.raises(FileExistsError):
-        aggregate_candidate_manifests([manifest], aggregate_path)
+        aggregate_candidate_manifests([manifest], aggregate_path, allow_development=True)
     assert aggregate_path.read_text(encoding="utf-8") == "external winner"
     assert not Path(str(aggregate_path) + ".lock").exists()
 
@@ -221,6 +226,8 @@ def test_synthetic_diagnostics_has_all_registry_categories_and_checks_manifest(t
     assert len(report["tag_counts_all_39"]) == 39
     assert len(report["family_counts_all_10"]) == 10
     assert report["errorful_rows"] + report["identity_rows"] == report["total_rows"]
+    assert report["publisher_distribution"]["<unknown>"]["identity"] == 1
+    assert "<unknown>" in (tmp_path / "report.md").read_text(encoding="utf-8")
     artifact.write_bytes(artifact.read_bytes() + b"tampered")
     with pytest.raises(RuntimeError, match="hash"):
         build_synthetic_test_diagnostics(artifact, tmp_path / "bad.json", tmp_path / "bad.md", manifest_path=manifest)

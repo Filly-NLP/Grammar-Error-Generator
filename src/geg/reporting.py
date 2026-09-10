@@ -114,6 +114,8 @@ def build_synthetic_test_diagnostics(
     family_counts = Counter({family: 0 for family in _all_families()})
     lengths = Counter({bucket: 0 for bucket in ("0-9", "10-19", "20-29", "30-49", "50+")})
     publishers: Counter[str] = Counter()
+    publisher_errorful: Counter[str] = Counter()
+    publisher_identity: Counter[str] = Counter()
     transitions: Counter[str] = Counter()
     total = errorful = identity = 0
     with pq.ParquetFile(input_path) as parquet:
@@ -128,10 +130,12 @@ def build_synthetic_test_diagnostics(
                 is_errorful = bool(row.get("is_errorful"))
                 if is_errorful:
                     errorful += 1
+                    publisher_errorful[str(row.get("publisher") or "<unknown>")] += 1
                 else:
                     identity += 1
+                    publisher_identity[str(row.get("publisher") or "<unknown>")] += 1
                 lengths[_length_bucket(str(row.get("target_text", row.get("source_text", ""))))] += 1
-                publishers[str(row.get("publisher") or "unknown")] += 1
+                publishers[str(row.get("publisher") or "<unknown>")] += 1
                 tags = _json_field(row.get("correction_tags"), []) or []
                 families = _json_field(row.get("error_families"), []) or []
                 for tag in tags:
@@ -170,6 +174,14 @@ def build_synthetic_test_diagnostics(
         "family_counts_all_10": dict(family_counts),
         "sentence_length_buckets": dict(lengths),
         "publisher_counts": dict(sorted(publishers.items())),
+        "publisher_distribution": {
+            publisher: {
+                "total": publishers[publisher],
+                "errorful": publisher_errorful[publisher],
+                "identity": publisher_identity[publisher],
+            }
+            for publisher in sorted(publishers)
+        },
         "morphology_transition_counts": dict(sorted(transitions.items())),
         "config_hash": manifest.get("config_hash") if manifest else None,
         "generator_dependency_hash": (manifest.get("candidate_generator_sha256") or manifest.get("generator_dependency_hash")) if manifest else None,
@@ -193,6 +205,10 @@ def build_synthetic_test_diagnostics(
     lines.extend(f"| {family} | {count} |" for family, count in family_counts.items())
     lines.extend(["", "## Sentence length", "", "| Bucket | Rows |", "|---|---:|"])
     lines.extend(f"| {bucket} | {count} |" for bucket, count in lengths.items())
+    lines.extend(["", "## Publisher Distribution", "", "| Publisher | Total | Share | Errorful | Identity |", "|---|---:|---:|---:|---:|"])
+    for publisher, count in sorted(publishers.items(), key=lambda item: (-item[1], item[0])):
+        share = (count / total) if total else 0.0
+        lines.append(f"| {publisher} | {count} | {share:.4f} | {publisher_errorful[publisher]} | {publisher_identity[publisher]} |")
     lines.extend(["", "## Morphology transitions", "", "| Transition | Rows |", "|---|---:|"])
     lines.extend(f"| {key} | {count} |" for key, count in sorted(transitions.items()))
     # Publish both reports through unique temporary siblings under exclusive

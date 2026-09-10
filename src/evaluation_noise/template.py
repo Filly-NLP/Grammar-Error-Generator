@@ -30,7 +30,9 @@ def template_manifest(*, control_count: int = CONTROL_MIN) -> dict[str, Any]:
             "sample_id", "raw_informal", "gold_normalized_errorful", "gold_final_correct",
             "normalization_types", "normalization_edits", "grammar_tags", "grammar_families", "grammar_edits",
             "real_or_controlled", "source_type", "provenance", "annotator_1", "annotator_2", "adjudication_status",
-            "normalization_rule_id", "normalization_rule_seen_status", "split",
+            "normalization_rule_id", "normalization_rule_ids", "normalization_pattern_id",
+            "normalization_pattern_ids", "normalization_rule_seen_status", "split",
+            "notes",
         ],
         "authentic_dependency_requirements": [
             "public source identifiers and URLs", "license and attribution", "two annotator records",

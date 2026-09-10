@@ -21,6 +21,7 @@ def main() -> None:
     parser.add_argument("--output", type=Path, default=Path("reports/phase9_candidate_aggregate.json"))
     parser.add_argument("--required-by-split", type=Path)
     parser.add_argument("--config", type=Path, default=Path("config/filly.yaml"))
+    parser.add_argument("--allow-development", action="store_true", help="allow explicit non-production planless fixture aggregation")
     args = parser.parse_args()
     required = None
     if args.required_by_split:
@@ -31,7 +32,7 @@ def main() -> None:
         split_settings = config.get("splits", {})
         fractions = {split: split_settings.get(split, {"train": "0.70", "dev": "0.15", "synthetic_test": "0.15"}[split]) for split in SPLITS}
         required = split_composition(comp["errorful"], fractions)
-    report = aggregate_candidate_manifests(args.manifest, args.output, required_by_split=required)
+    report = aggregate_candidate_manifests(args.manifest, args.output, required_by_split=required, allow_development=args.allow_development)
     print(json.dumps({key: report[key] for key in ("status", "requested_rows", "produced_rows", "shortfall", "phase10_capacity_adequate")}, indent=2))
 
 

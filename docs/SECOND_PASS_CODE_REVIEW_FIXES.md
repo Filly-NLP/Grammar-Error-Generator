@@ -29,6 +29,17 @@ candidate shards, aggregates, and final datasets must be treated as stale and
 must not be reused for production. The next unlock sequence is a fresh Phase 6
 census, a fresh Phase 8 pilot, new human review, then Phase 9/10.
 
+## Third-pass follow-up
+
+The third-pass follow-up closes the remaining configuration/provenance and
+selection inconsistencies: shard quotas now partition a single global plan,
+`max_rows` is an absolute output ceiling, pilot selection is stable-ranked,
+identity rows retain configuration provenance, resource construction records
+are structurally checked at freeze/load, and controlled-noise rules default to
+lexical boundaries. Synthetic diagnostics now render publisher distribution.
+These code changes do not fabricate missing linguistic resources; production
+remains fail-closed pending reviewed resources and a fresh human pilot review.
+
 ## Remaining blockers
 
 Genuine reviewed morphology paradigms, Filipino construction resources, and

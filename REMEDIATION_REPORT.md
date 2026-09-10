@@ -81,6 +81,72 @@ preflights create only blocked reports and no candidate/final dataset output.
 CODE COMPLETE FOR RESOURCE INGESTION/FREEZING AND PIPELINE HARDENING
 PRODUCTION GENERATION BLOCKED PENDING GENUINE REVIEWED RESOURCES AND HUMAN REVIEW
 
+## Third-pass reviewer correction pass (2026-09-10)
+
+| Finding | Status | Evidence and compatibility impact |
+|---|---|---|
+| Pre-shard global capacity plan | fixed | `build_candidate_plan()` scans the assigned input, measures shard-local replayable candidates, allocates one global request with proportional largest remainder, publishes an immutable hash-bound plan, and Phase 9 shards consume that plan. Aggregate validation recomputes the plan hash and verifies global/local capacity and ceiling invariants. |
+| Local hard ceilings and empty shards | fixed | Per-shard `max_output_rows` equals its allocated plan request. Overflow/refill cannot exceed that local ceiling; a zero-capacity planned shard publishes an empty schema-stable Parquet shard so aggregate completeness is still verifiable. |
+| Construction directions | fixed | Freeze/load validation now enforces exact directional lexical/delimiter invariants for all five hyphen/space tags. No reviewed resource rows were fabricated. |
+| Evaluation schema parity | fixed | Published JSON Schema now declares normalization rule/pattern scalar and list IDs, canonical/legacy family conditions, derived source-type conditions, and clean-control empty edits. Runtime alias comparison is order-insensitive and conflicts still fail closed. |
+| Publisher diagnostics and lexical boundaries | fixed | Missing publishers render as `<unknown>` with total/share/errorful/identity columns; token matching treats underscore and Unicode alphanumerics as word characters. |
+
+Fresh correction-pass validation:
+
+```text
+.venv\\Scripts\\python.exe -m pytest -q -> 170 passed, 1 skipped
+```
+
+The optional JSON-Schema validator test is skipped because the project
+environment does not declare `jsonschema`; the schema is still parsed and
+runtime validation remains covered. The correction pass invalidates prior
+Phase 8/9/10 artifacts where candidate planning, construction contracts, or
+evaluation schema semantics changed. No production artifact was regenerated
+and `corpus.db` was not touched. Final production remains blocked pending
+genuine reviewed morphology/construction/punctuation resources and fresh
+human approval.
+
+## Final correction pass (2026-09-10)
+
+| Finding | Status | Evidence and compatibility impact |
+|---|---|---|
+| Production aggregate plan requirement | fixed | Production-ready shard manifests now require exactly one shared candidate plan. Planless legacy aggregation is available only with explicit development mode and `production_ready=false`. The aggregate also binds the plan input hash to the canonical shard input hash. |
+| CLI bounds versus candidate plan | fixed | Candidate-plan shard bounds no longer silently replace explicit `target_rows`/`max_output_rows`; incompatible values fail closed. When omitted, the measured local plan bounds are used. A lower explicit maximum cannot expand to a larger planned ceiling. |
+| Evaluation `notes` contract | fixed | `notes` is now a required string in the published JSON Schema and is checked by the same runtime/freeze fixture validation. |
+
+Final validation after this correction:
+
+```text
+.venv\\Scripts\\python.exe -m pytest -q -> 172 passed, 1 skipped
+.venv\\Scripts\\python.exe -m compileall -q src scripts tests -> passed
+git diff --check -> passed
+```
+
+The optional schema-validator test remains skipped because `jsonschema` is
+not a project dependency. No production artifacts were regenerated and
+`corpus.db` was not touched.
+
+## Third-pass remediation (2026-09-10)
+
+| Finding | Status | Evidence |
+|---|---|---|
+| Phase 9 global shard quota accounting | fixed | Global group quotas are partitioned deterministically across shards; aggregate accounting sums shard partitions rather than duplicating each CLI ceiling. |
+| Candidate target/maximum controls | fixed | `target_rows` is distinct from the hard `max_output_rows` ceiling; legacy `max_rows` remains the ceiling alias and buffering is active between them. |
+| `errorful_only` fraction contradiction | fixed | Validation now requires `errorful_fraction=1` and `identity_fraction=0`. |
+| Effective morphology policy | fixed | Runtime config resolves the minimum validated-state policy; the morphology freeze CLI uses it unless explicitly overridden and records the effective value/config identity. |
+| Identity provenance | fixed | Final identity rows carry the active `config_hash`. |
+| Construction structural validation | fixed | Freeze and load paths reject lexical substitutions and require a delimiter-preserving hyphen/space relation. |
+| Informal noise lexical boundaries | fixed | Noise rules have explicit `match_mode`; token/phrase are boundary-aware and substring use remains explicit/reviewed. |
+| Evaluation schema synchronization | fixed | Published schema includes canonical grammar families and real/controlled metadata alongside the runtime contract. |
+| Phase 8 order independence | fixed | Pilot candidate selection is rebuilt from stable-ranked candidate pools, independent of input row order. |
+| Synthetic Markdown publisher distribution | fixed | Publisher counts and deterministic shares are rendered in the human-readable report. |
+
+Third-pass changes invalidate existing Phase 8 pilot/review, Phase 9
+candidate, aggregate, and Phase 10 dataset artifacts where selection,
+configuration, schema, or resource validation semantics changed. No production
+artifacts were regenerated and `corpus.db` was not touched. Genuine reviewed
+linguistic resources and human approval remain required before production.
+
 ## Second-pass refresh (2026-09-10)
 
 The Phase 8 pilot total is now authoritative in `phase8.pilot_total`, with

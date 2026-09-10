@@ -203,7 +203,7 @@ def canonicalize_record(record: Mapping[str, Any]) -> dict[str, Any]:
     family_values = item.get("grammar_families")
     legacy_values = item.get("error_families")
     if family_values is not None and legacy_values is not None:
-        if list(family_values) != list(legacy_values):
+        if Counter(str(value) for value in family_values) != Counter(str(value) for value in legacy_values):
             raise EvaluationValidationError("grammar_families and deprecated error_families disagree")
     if family_values is None and legacy_values is not None:
         family_values = legacy_values

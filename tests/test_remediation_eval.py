@@ -59,6 +59,33 @@ def _sample() -> dict:
 
 
 class EvaluationRemediationTests(unittest.TestCase):
+    def test_published_json_schema_accepts_same_canonical_fixture_as_runtime(self) -> None:
+        jsonschema = __import__("pytest").importorskip("jsonschema")
+        schema = json.loads(Path("resources/evaluation_item.schema.json").read_text(encoding="utf-8"))
+        validator = jsonschema.Draft202012Validator(schema)
+        validator.check_schema(schema)
+        validator.validate(_sample())
+
+        control = _sample()
+        control.update({
+            "sample_id": "control-1", "raw_informal": "Formal.",
+            "gold_normalized_errorful": "Formal.", "gold_final_correct": "Formal.",
+            "normalization_types": [], "normalization_edits": [],
+            "grammar_tags": [], "grammar_families": [], "grammar_edits": [],
+            "source_type": "clean_control", "real_or_controlled": "controlled",
+            "base_clean_id": None,
+        })
+        validator.validate(control)
+
+    def test_notes_is_required_by_published_schema_and_runtime_freeze_contract(self) -> None:
+        schema = json.loads(Path("resources/evaluation_item.schema.json").read_text(encoding="utf-8"))
+        assert "notes" in schema["required"]
+        row = _sample()
+        row.pop("notes")
+        inventory = {**NORMALIZER_INVENTORY, "rules": [{"id": "rule_seen", "pattern_id": "pattern_seen", "review_status": "approved"}]}
+        with self.assertRaisesRegex(EvaluationValidationError, r"notes"):
+            validate_dataset([row], inventory, require_full_composition=False)
+
     def test_primary_breakdowns_use_common_raw_baseline(self) -> None:
         sample = _sample()
         controls = dict(sample)

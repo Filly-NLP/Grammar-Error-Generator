@@ -28,6 +28,11 @@ class NoiseResourceError(ValueError):
     """Raised when a noise resource is absent, unreviewed, or malformed."""
 
 
+def _is_word_char(value: str) -> bool:
+    """Match Unicode lexical characters and underscore for token boundaries."""
+    return bool(value) and (value == "_" or value.isalnum())
+
+
 @dataclass(frozen=True)
 class NoiseRule:
     """One reviewed literal transformation used by the controlled injector.
@@ -44,6 +49,7 @@ class NoiseRule:
     resource_version: str
     review_status: str = APPROVED
     pattern_id: str | None = None
+    match_mode: str = "token"
     notes: str = ""
 
     @classmethod
@@ -61,6 +67,11 @@ class NoiseRule:
             raise NoiseResourceError(f"unknown noise category: {category}")
         if source == target:
             raise NoiseResourceError(f"noise rule is a no-op: {rule_id}")
+        match_mode = str(value.get("match_mode", "token"))
+        if match_mode not in {"token", "phrase", "substring"}:
+            raise NoiseResourceError(f"unknown noise rule match_mode: {match_mode}")
+        if match_mode == "substring" and str(value.get("review_status", "needs_review")) != APPROVED:
+            raise NoiseResourceError(f"substring noise rule must be approved: {rule_id}")
         return cls(
             rule_id=rule_id,
             category=category,
@@ -69,6 +80,7 @@ class NoiseRule:
             resource_version=resource_version,
             review_status=str(value.get("review_status", "needs_review")),
             pattern_id=None if value.get("pattern_id") is None else str(value["pattern_id"]),
+            match_mode=match_mode,
             notes=str(value.get("notes", "")),
         )
 
@@ -174,6 +186,7 @@ def freeze_noise_rules(
                 "source": rule.source,
                 "target": rule.target,
                 "pattern_id": rule.pattern_id,
+                "match_mode": rule.match_mode,
                 "review_status": rule.review_status,
                 "notes": rule.notes,
             }
@@ -302,8 +315,15 @@ def inject_informal_noise(
         else:
             seen = pattern_id in known_rule_patterns
         for start in range(len(normalized_errorful)):
+            if not normalized_errorful.startswith(rule.target, start):
+                continue
+            end = start + len(rule.target)
+            if rule.match_mode in {"token", "phrase"}:
+                before = normalized_errorful[start - 1] if start else " "
+                after = normalized_errorful[end] if end < len(normalized_errorful) else " "
+                if _is_word_char(before) or _is_word_char(after):
+                    continue
             if normalized_errorful.startswith(rule.target, start):
-                end = start + len(rule.target)
                 if not _overlaps(start, end, protected_spans):
                     digest = hashlib.sha256(f"{seed}|{sample_id}|{category}|{rule.rule_id}|{start}".encode("utf-8")).hexdigest()
                     candidates.append((int(digest, 16), "seen_rule" if seen else "unseen_pattern", rule, start))

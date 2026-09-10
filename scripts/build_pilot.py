@@ -75,6 +75,11 @@ def _pair_id(seed: int, split: str, clean_id: str, candidate: Candidate) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()[:32]
 
 
+def _candidate_rank(seed: int, clean_id: str, split: str, tag: str, source: str, target: str) -> int:
+    payload = f"{seed}|{split}|{clean_id}|{tag}|{source}|{target}".encode("utf-8")
+    return int(hashlib.sha256(payload).hexdigest(), 16)
+
+
 def _structurally_valid(candidate: Candidate, *, expected_resource_version: str | None = None) -> tuple[bool, str, AlignmentResult]:
     try:
         require_registered(candidate.correction_tag)
@@ -298,14 +303,17 @@ def build_pilot(
     # authoritative spans only for candidates that enter the pilot artifact.
     parquet = pq.ParquetFile(input_path)
     selected: list[dict[str, Any]] = []
-    selected_pairs: set[tuple[str, str]] = set()
-    selected_by_tag: Counter[tuple[str, str]] = Counter()
-    selected_by_split: Counter[str] = Counter()
-    fallback: dict[str, list[tuple[dict[str, Any], Candidate]]] = defaultdict(list)
-    fallback_seen: set[tuple[str, str]] = set()
     rejected: Counter[str] = Counter()
     not_applicable = 0
     rejection_samples: list[dict[str, Any]] = []
+    # Stable per-stratum reservoirs are populated for every eligible row/tag;
+    # no first-seen quota or bounded fallback cutoff is used.  The reservoir
+    # keeps the lowest deterministic ranks and is therefore input-order blind.
+    candidate_pool: dict[tuple[str, str], dict[str, tuple[int, dict[str, Any]]]] = defaultdict(dict)
+    pool_limits = {
+        (split, tag): quotas.get(split, {}).get(tag, 0) + max(2048, pilot_targets[split] // 2)
+        for split in pilot_targets for tag in tags
+    }
 
     def reject(reason: str, count: int = 1, **context: Any) -> None:
         rejected[str(reason)] += int(count)
@@ -334,14 +342,6 @@ def build_pilot(
                 continue
             clean = {name: values[name][index] for name in columns}
             for tag in tags:
-                # Once a tag quota is satisfied, a bounded overflow reserve is
-                # enough to repair small split/collision estimation gaps. This
-                # keeps the full-corpus pilot pass tractable.
-                if (
-                    selected_by_tag[(split, tag)] >= quotas[split].get(tag, 0)
-                    and len(fallback[split]) >= 1_000
-                ):
-                    continue
                 result = generate_candidates(str(clean["text"]), tag, compute_alignment=False, context=generator_context)
                 merge_generator_rejections(result, split=split, clean_id=str(clean["clean_id"]), tag=tag)
                 for candidate in result.candidates:
@@ -350,71 +350,58 @@ def build_pilot(
                         reject(reason, split=split, clean_id=str(clean["clean_id"]), tag=tag)
                         continue
                     pair_key = (candidate.source_text, candidate.target_text)
-                    if pair_key in selected_pairs or pair_key in fallback_seen:
-                        reject("output_pair_collision", split=split, clean_id=str(clean["clean_id"]), tag=tag)
-                        continue
-                    current_tag = selected_by_tag[(split, tag)]
-                    if current_tag < quotas[split].get(tag, 0) and selected_by_split[split] < pilot_targets[split]:
-                        selected_pairs.add(pair_key)
-                        selected_by_tag[(split, tag)] += 1
-                        selected_by_split[split] += 1
-                        selected.append(_record(clean, candidate, seed, config_hash, alignment))
-                    elif len(fallback[split]) < 20_000 and selected_by_split[split] < pilot_targets[split]:
-                        fallback[split].append((clean, candidate))
-                        fallback_seen.add(pair_key)
+                    record = _record(clean, candidate, seed, config_hash, alignment)
+                    group = (split, tag)
+                    rank = _candidate_rank(seed, str(clean["clean_id"]), split, tag, candidate.source_text, candidate.target_text)
+                    existing = candidate_pool[group].get(pair_key)
+                    if existing is None or rank < existing[0]:
+                        candidate_pool[group][pair_key] = (rank, record)
+                    limit = pool_limits[group]
+                    if len(candidate_pool[group]) > limit:
+                        discarded_pair = max(candidate_pool[group], key=lambda key: (candidate_pool[group][key][0], key))
+                        del candidate_pool[group][discarded_pair]
 
-    # Fill any capacity-estimation gaps with deterministic overflow candidates.
+    # Rebuild the pilot from the stable-ranked pool.  This makes equivalent
+    # logical input rows produce identical pilot/review samples regardless of
+    # physical Parquet order.
+    selected = []
     refill_performed = False
-    for split in pilot_targets:
-        for clean, candidate in fallback[split]:
-            if selected_by_split[split] >= pilot_targets[split]:
+    selected_pairs = set()
+    selected_by_tag = Counter()
+    selected_by_split = Counter()
+    for group in sorted(candidate_pool):
+        split, tag = group
+        entries = sorted(candidate_pool[group].values(), key=lambda item: (item[0], item[1]["pair_id"]))
+        for _, row in entries:
+            if selected_by_tag[group] >= quotas.get(split, {}).get(tag, 0):
                 break
-            pair_key = (candidate.source_text, candidate.target_text)
+            pair_key = (str(row["source_text"]), str(row["target_text"]))
             if pair_key in selected_pairs:
                 continue
-            valid, reason, alignment = _structurally_valid(candidate, expected_resource_version=str(generator_context.morphology_manifest.get("resource_version", "")).strip() or None)
-            if not valid:
-                reject(reason, split=split, clean_id=str(clean["clean_id"]), tag=candidate.correction_tag)
+            selected_pairs.add(pair_key)
+            selected_by_tag[group] += 1
+            selected_by_split[split] += 1
+            selected.append(row)
+    # Fill split-level structural gaps from all remaining ranked candidates.
+    if any(selected_by_split[split] < pilot_targets[split] for split in pilot_targets):
+        refill_performed = True
+        overflow = []
+        for group, values in candidate_pool.items():
+            for rank, row in values.values():
+                if (str(row["source_text"]), str(row["target_text"])) not in selected_pairs:
+                    overflow.append((rank, row))
+        overflow.sort(key=lambda item: (item[0], item[1]["pair_id"]))
+        for _, row in overflow:
+            split = str(row["split"])
+            if selected_by_split[split] >= pilot_targets[split]:
+                continue
+            pair_key = (str(row["source_text"]), str(row["target_text"]))
+            if pair_key in selected_pairs:
                 continue
             selected_pairs.add(pair_key)
             selected_by_split[split] += 1
-            selected_by_tag[(split, candidate.correction_tag)] += 1
-            selected.append(_record(clean, candidate, seed, config_hash, alignment))
-
-        # If structural rejection or collisions exhausted the bounded reserve,
-        # deterministically rescan without tag quotas to fill remaining slots.
-        if selected_by_split[split] < pilot_targets[split]:
-            refill_performed = True
-            for batch in parquet.iter_batches(columns=columns):
-                values = {name: batch.column(name).to_pylist() for name in columns}
-                for index in range(len(values["clean_id"])):
-                    if selected_by_split[split] >= pilot_targets[split]:
-                        break
-                    if str(values["split"][index]) != split:
-                        continue
-                    clean = {name: values[name][index] for name in columns}
-                    for tag in tags:
-                        if selected_by_split[split] >= pilot_targets[split]:
-                            break
-                        result = generate_candidates(str(clean["text"]), tag, compute_alignment=False, context=generator_context)
-                        merge_generator_rejections(result, split=split, clean_id=str(clean["clean_id"]), tag=tag)
-                        for candidate in result.candidates:
-                            if selected_by_split[split] >= pilot_targets[split]:
-                                break
-                            pair_key = (candidate.source_text, candidate.target_text)
-                            if pair_key in selected_pairs:
-                                continue
-                            valid, reason, alignment = _structurally_valid(candidate, expected_resource_version=str(generator_context.morphology_manifest.get("resource_version", "")).strip() or None)
-                            if not valid:
-                                reject(reason, split=split, clean_id=str(clean["clean_id"]), tag=tag)
-                                continue
-                            selected_pairs.add(pair_key)
-                            selected_by_split[split] += 1
-                            selected_by_tag[(split, candidate.correction_tag)] += 1
-                            selected.append(_record(clean, candidate, seed, config_hash, alignment))
-                if selected_by_split[split] >= pilot_targets[split]:
-                    break
-
+            selected_by_tag[(split, row["correction_tags"][0])] += 1
+            selected.append(row)
     selected.sort(key=lambda row: (split_order[row["split"]], row["correction_tags"][0], row["clean_id"], row["pair_id"]))
     output_path.parent.mkdir(parents=True, exist_ok=True)
     table = pa.Table.from_pylist(selected, schema=gec_arrow_schema())

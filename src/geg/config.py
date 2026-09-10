@@ -92,8 +92,8 @@ def validate_config(config: dict[str, Any]) -> dict[str, Any]:
     identity = _decimal(dataset.get("identity_fraction", 0 if mode == "errorful_only" else "0.17"), "dataset.identity_fraction")
     if mode == "balarila_total" and errorful + identity != Decimal("1"):
         raise ValueError("dataset.errorful_fraction + dataset.identity_fraction must equal 1")
-    if mode == "errorful_only" and identity != 0:
-        raise ValueError("dataset.identity_fraction must be 0 in errorful_only mode")
+    if mode == "errorful_only" and (errorful != Decimal("1") or identity != Decimal("0")):
+        raise ValueError("errorful_only requires errorful_fraction=1 and identity_fraction=0")
     split_values = {split: _decimal(splits.get(split), f"splits.{split}") for split in SPLITS}
     if any(value <= 0 for value in split_values.values()):
         raise ValueError("train/dev/synthetic_test split fractions must be positive")
@@ -163,6 +163,7 @@ def resolve_runtime_config(config: dict[str, Any]) -> dict[str, Any]:
         "candidate_buffer_ratio": str(candidate_buffer),
         "pilot_total": int(phase8.get("pilot_total", 100_000)),
         "resource_paths": resource_paths(value),
+        "minimum_validated_states_per_lemma": int(value.get("morphology", {}).get("minimum_validated_states_per_lemma", 3)),
     }
     # Keep a short alias for callers that need resolved values while keeping
     # the original config tree intact for hashing and provenance.

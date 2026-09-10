@@ -8,7 +8,7 @@ import tempfile
 from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from .hashing import sha256_file
 from .states import state_by_id
@@ -139,6 +139,40 @@ def _validate_freeze_paths(input_path: Path, resource_path: Path, manifest_path:
                 pass
 
 
+def _validate_construction_surface(tag: str, correct: str, wrong: str) -> None:
+    """Require a reviewed hyphen/space record to preserve lexical material."""
+    if not correct or not wrong or correct == wrong:
+        raise ValueError("construction surfaces must be non-empty and distinct")
+    if correct.replace("-", "").replace(" ", "") != wrong.replace("-", "").replace(" ", ""):
+        raise ValueError(f"construction {tag} changes lexical content")
+    # These directional invariants intentionally describe the correction side
+    # (``correct_surface``) and the generated erroneous side separately.
+    # Exactly one delimiter is allowed; lexical material must remain equal.
+    expected = {
+        "$MERGE_HYPHEN": ("-", " "),
+        "$TRANSFORM_INSERT_HYPHEN": ("-", " "),
+        "$TRANSFORM_SPLIT_HYPHEN": (" ", "-"),
+        "$MERGE_SPACE": (" ", ""),
+        "$TRANSFORM_SPLIT_SPACE": ("", " "),
+    }
+    if tag not in expected:
+        raise ValueError(f"unsupported construction tag: {tag}")
+    correct_delimiter, wrong_delimiter = expected[tag]
+    if correct_delimiter:
+        if correct.count(correct_delimiter) != 1 or correct.count("-" if correct_delimiter == " " else " ") != 0:
+            raise ValueError(f"construction {tag} has the wrong correct-side delimiter")
+    elif any(char in "- " for char in correct):
+        raise ValueError(f"construction {tag} correct side must be joined")
+    if tag == "$TRANSFORM_INSERT_HYPHEN":
+        if wrong.count("-") or wrong.count(" ") > 1:
+            raise ValueError(f"construction {tag} has the wrong generated-side delimiter")
+    elif wrong_delimiter:
+        if wrong.count(wrong_delimiter) != 1 or wrong.count("-" if wrong_delimiter == " " else " ") != 0:
+            raise ValueError(f"construction {tag} has the wrong generated-side delimiter")
+    elif any(char in "- " for char in wrong):
+        raise ValueError(f"construction {tag} generated side must be merged")
+
+
 def _publish_pair(input_path: Path, resource_path: Path, manifest_path: Path, rows: list[dict[str, Any]], manifest: dict[str, Any]) -> dict[str, Any]:
     """Publish resource and manifest as one lock-protected pair.
 
@@ -199,6 +233,9 @@ def freeze_morphology(
     mapping_rule_artifact: Path | None = None,
     minimum_validated_states: int = 3,
     resource_version: str = "tagalog-verb-paradigms-v1",
+    effective_config_hash: str | None = None,
+    effective_config: Mapping[str, Any] | None = None,
+    cli_overrides: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Freeze only explicitly approved, manually reviewed morphology rows."""
     if not reviewer.strip() or not reviewed_at.strip() or not source_resource.strip() or not source_version.strip() or not license_text.strip() or not mapping_rule_version.strip():
@@ -271,6 +308,9 @@ def freeze_morphology(
         "reviewer": reviewer,
         "reviewed_at": reviewed_at,
         "minimum_validated_states_per_lemma": minimum_validated_states,
+        "effective_config_hash": effective_config_hash,
+        "effective_config": dict(effective_config or {}),
+        "cli_overrides": dict(cli_overrides or {}),
         "row_count": len(normalized),
         "lemma_count": len(enabled),
         "state_counts": dict(sorted(Counter(row["balarila_state"] for row in normalized).items())),
@@ -322,8 +362,10 @@ def freeze_constructions(
             raise ValueError(f"row {index} correction_tag/family mismatch")
         correct = str(row["correct_surface"])
         wrong = str(row["generated_wrong_surface"])
-        if correct == wrong:
-            raise ValueError(f"row {index} source and target construction are identical")
+        try:
+            _validate_construction_surface(tag, correct, wrong)
+        except ValueError as error:
+            raise ValueError(f"row {index}: {error}") from error
         key = (correct, wrong, tag)
         if key in seen:
             raise ValueError(f"duplicate construction record at row {index}")
@@ -463,6 +505,16 @@ def load_frozen_jsonl(resource_path: Path, manifest_path: Path) -> tuple[list[di
         rows = _read_jsonl(resource_path)
     if any(row.get("review_status") != "approved" for row in rows):
         raise ValueError(f"frozen resource contains unapproved rows: {resource_path}")
+    for index, row in enumerate(rows, 1):
+        if str(row.get("family", "")) in {"hyphen", "space"}:
+            try:
+                _validate_construction_surface(
+                    str(row.get("correction_tag", "")),
+                    str(row.get("correct_surface", "")),
+                    str(row.get("generated_wrong_surface", "")),
+                )
+            except ValueError as error:
+                raise ValueError(f"frozen construction row {index} is structurally invalid: {error}") from error
     resource_version = str(manifest.get("resource_version", ""))
     if any("resource_version" in row and str(row.get("resource_version")) != resource_version for row in rows):
         raise ValueError(f"frozen resource row version does not match manifest: {resource_path}")
