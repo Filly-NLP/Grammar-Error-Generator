@@ -2,23 +2,26 @@
   "status": "complete",
   "input": "D:\\files\\Online Classes\\College\\4th Year\\random\\Grammar-Error-Generator\\data\\interim\\validated_clean.parquet",
   "output": "D:\\files\\Online Classes\\College\\4th Year\\random\\Grammar-Error-Generator\\data\\interim\\split_clean.parquet",
-  "rows": 432078,
+  "rows": 431840,
   "groups": 40634,
   "grouping": "source_doc_id when present, clean_id fallback",
   "seed": 20260905,
   "algorithm_version": "filly-phase5-split-v1",
-  "config_hash": "f927575f4bfee486e881bea2e8c007b35197ba9536c1d34e4e26ba323ccc69a8",
-  "input_sha256": "b0f8fd95f79b4cc8013f3a9705d3c1a663a68daaffd9f6680eb6912e7bd979a8",
-  "output_sha256": "c0262c173459a4d6e643bf683397f32f8ab0d081e3358ee6502af100ac9a25db",
+  "config_hash": "810a41c1a2d196d2e72bd9b0788e89fd18a7cab433a207b42da3fbc3ba20a3df",
+  "quality_manifest_sha256": "e70d52c4317424318c9c53941c6241c5c249f3072d080c28d88c020c551ad40e",
+  "quality_manifest": "D:\\files\\Online Classes\\College\\4th Year\\random\\Grammar-Error-Generator\\reports\\run_manifest.json",
+  "input_sqlite_sha256": "aadfbbaf0f9ee428e394395a4c73a13dcb0a798b75ca2356eece0f1df0fc7f50",
+  "input_sha256": "0299f7246c7d836f510f47267cc4aaab412e0f9f64262fb01d5a30b69d477d74",
+  "output_sha256": "d2e1393b1f9e7a2029b1cad08a1924b62926591da928a1131ea938bdac64a477",
   "fractions": {
     "train": 0.7,
     "dev": 0.15,
     "synthetic_test": 0.15
   },
   "row_counts": {
-    "dev": 64812,
-    "synthetic_test": 64812,
-    "train": 302454
+    "dev": 64776,
+    "synthetic_test": 64776,
+    "train": 302288
   },
   "group_counts": {
     "dev": 6094,

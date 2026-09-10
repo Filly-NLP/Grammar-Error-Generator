@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FILLY prediction artifact row",
+  "type": "object",
+  "required": ["sample_id", "condition", "raw_input", "normalizer_output", "gec_input", "gec_output", "predicted_edits_coordinate_space", "model_version", "frozen_evaluation_sha256", "normalizer_version", "gec_version"],
+  "properties": {
+    "sample_id": {"type": "string", "minLength": 1},
+    "condition": {"enum": ["raw_to_gec", "raw_to_normalizer_to_gec", "oracle_normalized_to_gec"]},
+    "raw_input": {"type": "string"},
+    "normalizer_output": {"type": ["string", "null"]},
+    "gec_input": {"type": "string"},
+    "gec_output": {"type": "string"},
+    "predicted_tags": {"type": ["array", "null"], "items": {"type": "string"}},
+    "predicted_edits": {"type": ["array", "null"], "items": {"type": "object"}},
+    "predicted_edits_coordinate_space": {"enum": ["gec_input", "gold_normalized"]},
+    "model_version": {"type": "string", "minLength": 1},
+    "frozen_evaluation_sha256": {"type": "string", "minLength": 1},
+    "normalizer_version": {"type": "string", "minLength": 1},
+    "gec_version": {"type": "string", "minLength": 1}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"condition": {"const": "raw_to_gec"}}},
+      "then": {"properties": {"normalizer_output": {"type": "null"}}}
+    },
+    {
+      "if": {"properties": {"condition": {"enum": ["raw_to_normalizer_to_gec", "oracle_normalized_to_gec"]}}},
+      "then": {"properties": {"normalizer_output": {"type": "string"}}}
+    }
+  ]
+}

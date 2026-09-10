@@ -29,3 +29,25 @@ The report records hashes for the split input, capacity report, generator
 sources, configuration, and pilot output. Automated structural review is
 complete; human linguistic review is pending. The pilot is not claimed as
 reviewed or production-ready.
+
+## Review fixes and regeneration (2026-09-08)
+
+All builder outputs, reports, and review-sample destinations must be distinct
+from each other and from their inputs/configuration. Existing hard-link and
+symlink aliases are rejected before writing.
+
+Phase 5 requires the Phase 4 run manifest (`--quality-manifest`, default
+`reports/run_manifest.json`) with matching configuration and validated-data
+hashes. Phase 6 requires the Phase 5 report (`--split-report`, default
+`reports/base_split_report.json`) and propagates both `quality_manifest_sha256`
+and `split_report_sha256` into the census and pilot reports.
+
+The census records `candidates_by_split` for each tag. Pilot quotas use these
+counts directly. A deterministic second scan fills remaining slots without tag
+quotas when the bounded overflow reserve is exhausted; `refill_performed`
+records whether this was needed.
+
+Generator hashes now use repository-relative filenames and contents. The new
+hash format, enclitic rules, and formality configuration invalidate earlier
+artifacts. Regenerate phases 4, 5, 6, and 8 in that order before using a new
+pilot. Human linguistic review remains required before Phase 9.

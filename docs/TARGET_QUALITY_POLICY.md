@@ -46,3 +46,19 @@ All thresholds and pattern lists live in `config/filly.yaml`. Disabling a gate
 must be an explicit configuration change recorded in the run manifest. The
 primary corpus remains read-only, and no second deduplication pass is implied
 by these quality checks.
+
+The informal-marker patterns use `(?<!\w)` and `(?!\w)` boundaries. Punctuation
+adjacent markers such as `lol.`, `(LOL)!`, and `omg!` are quarantined, while
+containing words such as `lola` and `Lolita` are not matched.
+
+## Enclitic pilot policy
+
+The inverse generator applies the traditional din/rin and daw/raw convention:
+vowel and `w`/`y` glide endings select the r-form, with d-form exceptions after
+`-ri`, `-ra`, `-raw`, and `-ray`. Accent marks are removed only for context
+classification; source and target spelling are preserved. Metadata records the
+final class and whether an exception applied. This is a stated pilot policy,
+not a claim that alternate usages are universally ungrammatical; human review
+remains pending.
+
+Reference: https://kwf.gov.ph/wp-content/uploads/MMP_Full.pdf

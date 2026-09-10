@@ -1,12 +1,12 @@
 {
   "status": "complete",
-  "rows_exported": 432078,
-  "rows_quarantined": 85264,
+  "rows_exported": 431840,
+  "rows_quarantined": 85502,
   "input_rows": 517342,
-  "validated_rows": 432078,
-  "quarantined_rows": 85264,
+  "validated_rows": 431840,
+  "quarantined_rows": 85502,
   "quarantine_reasons": {
-    "informal_marker": 168,
+    "informal_marker": 634,
     "language_code_switch_borderline": 109,
     "language_code_switch_clause": 161,
     "low_alphabetic_ratio": 1,
@@ -135,8 +135,8 @@
     ],
     "check_formality": true,
     "formality_patterns": [
-      "(?i)(^|\\s)(lol|lmao|omg|hahaha+|hehe+)(\\s|$)",
-      "(?i)(^|\\s)(xd|wla|d2|aq)(\\s|$)"
+      "(?i)(?<!\\w)(lol|lmao|omg|hahaha+|hehe+)(?!\\w)",
+      "(?i)(?<!\\w)(xd|wla|d2|aq)(?!\\w)"
     ],
     "reject_urls_and_email": true
   },
@@ -150,10 +150,10 @@
   "near_deduplication_performed": false,
   "source_read_only": true,
   "input_sqlite_sha256": "aadfbbaf0f9ee428e394395a4c73a13dcb0a798b75ca2356eece0f1df0fc7f50",
-  "config_hash": "f927575f4bfee486e881bea2e8c007b35197ba9536c1d34e4e26ba323ccc69a8",
+  "config_hash": "810a41c1a2d196d2e72bd9b0788e89fd18a7cab433a207b42da3fbc3ba20a3df",
   "artifact_hashes": {
     "base_sentences": "930b3fb3e301586695ffa0f23f456df25e8197881394ff6ac093a4d87430f3e3",
-    "validated_clean": "b0f8fd95f79b4cc8013f3a9705d3c1a663a68daaffd9f6680eb6912e7bd979a8",
-    "quarantined_clean": "906542d7b56f55df205987343b968070594ece774e0a01aece6630f467dcab29"
+    "validated_clean": "0299f7246c7d836f510f47267cc4aaab412e0f9f64262fb01d5a30b69d477d74",
+    "quarantined_clean": "32ff695bb3aca8049554e71167392de29563de5bff8754a06ec9c43dc0ffe3c4"
   }
 }

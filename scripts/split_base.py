@@ -13,6 +13,7 @@ if __package__ in (None, ""):
 
 from src.geg.config import config_hash, load_config
 from src.geg.hashing import sha256_file
+from src.geg.artifacts import validate_destinations, verify_manifest
 from src.geg.split import SPLIT_NAMES, assign_group_splits, group_key
 
 
@@ -30,6 +31,7 @@ def split_parquet(
     report_path: Path,
     config_path: Path = Path("config/filly.yaml"),
     seed: int | None = None,
+    quality_manifest: Path = Path("reports/run_manifest.json"),
 ) -> dict[str, object]:
     try:
         import pyarrow as pa
@@ -39,10 +41,15 @@ def split_parquet(
     input_path = input_path.resolve()
     output_path = output_path.resolve()
     report_path = report_path.resolve()
-    if input_path == output_path:
-        raise ValueError("split output must be distinct from validated input")
+    validate_destinations(
+        {"input": input_path, "config": config_path, "quality_manifest": quality_manifest},
+        {"output": output_path, "report": report_path},
+    )
     config = load_config(config_path.resolve())
     config_digest = config_hash(config)
+    quality_provenance = verify_manifest(quality_manifest, input_path, config_digest, "validated_clean")
+    if not quality_provenance.get("input_sqlite_sha256"):
+        raise RuntimeError("quality manifest lacks input_sqlite_sha256; regenerate Phase 4")
     split_config = config.get("splits", {})
     fractions = {
         "train": float(split_config.get("train", 0.70)),
@@ -94,6 +101,9 @@ def split_parquet(
         "seed": seed,
         "algorithm_version": SPLIT_ALGORITHM_VERSION,
         "config_hash": config_digest,
+        "quality_manifest_sha256": sha256_file(quality_manifest),
+        "quality_manifest": str(quality_manifest.resolve()),
+        "input_sqlite_sha256": quality_provenance["input_sqlite_sha256"],
         "input_sha256": sha256_file(input_path),
         "output_sha256": sha256_file(output_path),
         "fractions": fractions,
@@ -113,8 +123,9 @@ def main() -> None:
     parser.add_argument("--report", type=Path, default=Path("reports/base_split_report.json"))
     parser.add_argument("--config", type=Path, default=Path("config/filly.yaml"))
     parser.add_argument("--seed", type=int)
+    parser.add_argument("--quality-manifest", type=Path, default=Path("reports/run_manifest.json"))
     args = parser.parse_args()
-    print(json.dumps(split_parquet(args.input, args.output, args.report, args.config, args.seed), indent=2))
+    print(json.dumps(split_parquet(args.input, args.output, args.report, args.config, args.seed, args.quality_manifest), indent=2))
 
 
 if __name__ == "__main__":

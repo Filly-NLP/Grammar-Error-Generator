@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FILLY end-to-end evaluation item",
+  "type": "object",
+  "required": ["sample_id", "raw_informal", "gold_normalized_errorful", "gold_final_correct", "normalization_edits", "grammar_tags", "grammar_edits", "source_type", "provenance", "annotator_1", "annotator_2", "adjudication_status", "split"],
+  "properties": {
+    "sample_id": {"type": "string", "minLength": 1},
+    "raw_informal": {"type": "string", "minLength": 1},
+    "gold_normalized_errorful": {"type": "string", "minLength": 1},
+    "gold_final_correct": {"type": "string", "minLength": 1},
+    "normalization_types": {"type": "array", "items": {"type": "string"}},
+    "normalization_edits": {"type": "array"},
+    "grammar_tags": {"type": "array", "items": {"type": "string"}},
+    "grammar_edits": {"type": "array"},
+    "source_type": {"enum": ["authentic", "controlled", "clean_control"]},
+    "base_clean_id": {"type": ["string", "null"]},
+    "provenance": {"type": "object", "required": ["source_id", "source_type", "license", "attribution", "captured_at"]},
+    "annotator_1": {"type": "string", "minLength": 1},
+    "annotator_2": {"type": "string", "minLength": 1},
+    "adjudication_status": {"type": "string", "minLength": 1},
+    "normalization_rule_id": {"type": "string"},
+    "normalization_rule_seen_status": {"enum": ["seen_rule", "unseen_pattern"]},
+    "split": {"const": "test_only"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"source_type": {"enum": ["authentic", "controlled"]}}},
+      "then": {"required": ["normalization_types", "normalization_rule_id", "normalization_rule_seen_status"]}
+    },
+    {
+      "if": {"properties": {"source_type": {"const": "controlled"}}},
+      "then": {"required": ["base_clean_id"]}
+    }
+  ]
+}

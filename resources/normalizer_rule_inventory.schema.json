@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Frozen FILLY normalizer rule inventory",
+  "type": "object",
+  "required": ["status", "version", "source", "license", "rules"],
+  "properties": {
+    "status": {"const": "frozen"},
+    "version": {"type": "string", "minLength": 1},
+    "source": {"type": "string", "minLength": 1},
+    "license": {"type": "string", "minLength": 1},
+    "rules": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {"id": {"type": "string", "minLength": 1}}
+      }
+    }
+  }
+}

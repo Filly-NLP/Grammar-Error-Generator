@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FILLY Phase 8 pilot linguistic review manifest",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "status",
+    "decision",
+    "reviewer",
+    "adjudicator",
+    "reviewed_at",
+    "target",
+    "expected_review_rows",
+    "reviewed_rows",
+    "accepted_rows",
+    "revised_rows",
+    "rejected_rows",
+    "row_decisions"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "status": {"enum": ["complete", "incomplete", "stale", "revise", "reject"]},
+    "decision": {"type": "string"},
+    "reviewer": {"type": "string"},
+    "adjudicator": {"type": "string"},
+    "reviewed_at": {"type": "string"},
+    "target": {
+      "type": "object",
+      "required": ["pilot_report", "pilot_output", "review_sample"],
+      "properties": {
+        "pilot_report": {"type": "string"},
+        "pilot_output": {"type": "string"},
+        "review_sample": {"type": "string"},
+        "pilot_report_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "pilot_output_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "review_sample_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "pilot_report_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "pilot_output_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "review_sample_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "expected_review_rows": {"type": "integer", "minimum": 1},
+    "reviewed_rows": {"type": "integer", "minimum": 0},
+    "accepted_rows": {"type": "integer", "minimum": 0},
+    "revised_rows": {"type": "integer", "minimum": 0},
+    "rejected_rows": {"type": "integer", "minimum": 0},
+    "row_decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["pair_id", "sample_row_sha256", "decision", "notes"],
+        "properties": {
+          "pair_id": {"type": "string", "minLength": 1},
+          "sample_row_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "decision": {"enum": ["approve", "approved", "accept", "accepted", "revise", "revision_required", "reject", "rejected"]},
+          "notes": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "notes": {"type": "string"}
+  }
+}

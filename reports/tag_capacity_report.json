@@ -1,156 +1,219 @@
 {
   "status": "complete",
   "input": "D:\\files\\Online Classes\\College\\4th Year\\random\\Grammar-Error-Generator\\data\\interim\\split_clean.parquet",
-  "input_sha256": "c0262c173459a4d6e643bf683397f32f8ab0d081e3358ee6502af100ac9a25db",
+  "input_sha256": "d2e1393b1f9e7a2029b1cad08a1924b62926591da928a1131ea938bdac64a477",
   "config_path": "D:\\files\\Online Classes\\College\\4th Year\\random\\Grammar-Error-Generator\\config\\filly.yaml",
-  "config_hash": "f927575f4bfee486e881bea2e8c007b35197ba9536c1d34e4e26ba323ccc69a8",
-  "generator_version": "filly-generators-v2-alignment-replay",
-  "generator_sha256": "be1377d75e492c9e90823d2fcd74cfa3bc092c8f4c15a2657f68bcae4475d6cf",
-  "input_rows": 432078,
+  "config_hash": "810a41c1a2d196d2e72bd9b0788e89fd18a7cab433a207b42da3fbc3ba20a3df",
+  "split_report_sha256": "a08a02a52ddce7e8a820411d9764d13dd88e65fbc5435fb2aa851a3d165aa1e4",
+  "quality_manifest_sha256": "e70d52c4317424318c9c53941c6241c5c249f3072d080c28d88c020c551ad40e",
+  "input_sqlite_sha256": "aadfbbaf0f9ee428e394395a4c73a13dcb0a798b75ca2356eece0f1df0fc7f50",
+  "generator_version": "filly-generators-v3-enclitic-context",
+  "generator_sha256": "56a98f789ecbec0012b1949b898c2abc571bd1f04b0c819b38b126401e0e89fc",
+  "input_rows": 431840,
   "tag_count": 39,
   "tags": [
     {
       "tag": "$REPLACE_nang",
       "family": "ng_nang",
       "status": "supported",
-      "train": 21665,
-      "dev": 4918,
-      "synthetic_test": 4701,
-      "eligible_clean_sentences": 31284,
-      "positions": 32850,
-      "candidates": 32850,
+      "train": 21918,
+      "dev": 4665,
+      "synthetic_test": 4685,
+      "eligible_clean_sentences": 31268,
+      "positions": 32834,
+      "candidates": 32834,
+      "candidates_by_split": {
+        "train": 22999,
+        "synthetic_test": 4927,
+        "dev": 4908
+      },
       "reason": ""
     },
     {
       "tag": "$REPLACE_ng",
       "family": "ng_nang",
       "status": "supported",
-      "train": 168364,
-      "dev": 35941,
-      "synthetic_test": 36094,
-      "eligible_clean_sentences": 240399,
-      "positions": 378838,
-      "candidates": 378838,
+      "train": 168320,
+      "dev": 35995,
+      "synthetic_test": 35996,
+      "eligible_clean_sentences": 240311,
+      "positions": 378705,
+      "candidates": 378705,
+      "candidates_by_split": {
+        "dev": 57092,
+        "train": 264887,
+        "synthetic_test": 56726
+      },
       "reason": ""
     },
     {
       "tag": "$REPLACE_daw",
       "family": "enclitic",
       "status": "supported",
-      "train": 10663,
-      "dev": 2292,
-      "synthetic_test": 2360,
-      "eligible_clean_sentences": 15315,
-      "positions": 16027,
-      "candidates": 16027,
+      "train": 10360,
+      "dev": 2165,
+      "synthetic_test": 2231,
+      "eligible_clean_sentences": 14756,
+      "positions": 15415,
+      "candidates": 15415,
+      "candidates_by_split": {
+        "dev": 2265,
+        "train": 10817,
+        "synthetic_test": 2333
+      },
       "reason": ""
     },
     {
       "tag": "$REPLACE_din",
       "family": "enclitic",
       "status": "supported",
-      "train": 15696,
-      "dev": 3302,
-      "synthetic_test": 3394,
-      "eligible_clean_sentences": 22392,
-      "positions": 23077,
-      "candidates": 23077,
+      "train": 14622,
+      "dev": 3227,
+      "synthetic_test": 3130,
+      "eligible_clean_sentences": 20979,
+      "positions": 21583,
+      "candidates": 21583,
+      "candidates_by_split": {
+        "synthetic_test": 3207,
+        "dev": 3318,
+        "train": 15058
+      },
       "reason": ""
     },
     {
       "tag": "$REPLACE_dito",
       "family": "enclitic",
       "status": "supported",
-      "train": 4332,
-      "dev": 947,
-      "synthetic_test": 931,
-      "eligible_clean_sentences": 6210,
-      "positions": 6245,
-      "candidates": 6245,
+      "train": 4179,
+      "dev": 904,
+      "synthetic_test": 898,
+      "eligible_clean_sentences": 5981,
+      "positions": 6015,
+      "candidates": 6015,
+      "candidates_by_split": {
+        "synthetic_test": 904,
+        "dev": 909,
+        "train": 4202
+      },
       "reason": ""
     },
     {
       "tag": "$REPLACE_diyan",
       "family": "enclitic",
       "status": "supported",
-      "train": 1122,
-      "dev": 251,
-      "synthetic_test": 240,
-      "eligible_clean_sentences": 1613,
-      "positions": 1623,
-      "candidates": 1623,
+      "train": 1072,
+      "dev": 226,
+      "synthetic_test": 218,
+      "eligible_clean_sentences": 1516,
+      "positions": 1525,
+      "candidates": 1525,
+      "candidates_by_split": {
+        "train": 1077,
+        "dev": 227,
+        "synthetic_test": 221
+      },
       "reason": ""
     },
     {
       "tag": "$REPLACE_doon",
       "family": "enclitic",
       "status": "supported",
-      "train": 1072,
-      "dev": 229,
-      "synthetic_test": 224,
-      "eligible_clean_sentences": 1525,
-      "positions": 1541,
-      "candidates": 1541,
+      "train": 967,
+      "dev": 193,
+      "synthetic_test": 218,
+      "eligible_clean_sentences": 1378,
+      "positions": 1387,
+      "candidates": 1387,
+      "candidates_by_split": {
+        "train": 973,
+        "synthetic_test": 221,
+        "dev": 193
+      },
       "reason": ""
     },
     {
       "tag": "$REPLACE_raw",
       "family": "enclitic",
       "status": "supported",
-      "train": 11062,
-      "dev": 2478,
-      "synthetic_test": 2358,
-      "eligible_clean_sentences": 15898,
-      "positions": 16569,
-      "candidates": 16569,
+      "train": 10981,
+      "dev": 2366,
+      "synthetic_test": 2381,
+      "eligible_clean_sentences": 15728,
+      "positions": 16384,
+      "candidates": 16384,
+      "candidates_by_split": {
+        "train": 11447,
+        "synthetic_test": 2471,
+        "dev": 2466
+      },
       "reason": ""
     },
     {
       "tag": "$REPLACE_rin",
       "family": "enclitic",
       "status": "supported",
-      "train": 29995,
-      "dev": 6329,
-      "synthetic_test": 6423,
-      "eligible_clean_sentences": 42747,
-      "positions": 45070,
-      "candidates": 45070,
+      "train": 30129,
+      "dev": 6410,
+      "synthetic_test": 6398,
+      "eligible_clean_sentences": 42937,
+      "positions": 45288,
+      "candidates": 45288,
+      "candidates_by_split": {
+        "dev": 6762,
+        "train": 31776,
+        "synthetic_test": 6750
+      },
       "reason": ""
     },
     {
       "tag": "$REPLACE_roon",
       "family": "enclitic",
       "status": "supported",
-      "train": 422,
-      "dev": 99,
-      "synthetic_test": 107,
-      "eligible_clean_sentences": 628,
-      "positions": 635,
-      "candidates": 635,
+      "train": 464,
+      "dev": 81,
+      "synthetic_test": 89,
+      "eligible_clean_sentences": 634,
+      "positions": 641,
+      "candidates": 641,
+      "candidates_by_split": {
+        "train": 470,
+        "dev": 81,
+        "synthetic_test": 90
+      },
       "reason": ""
     },
     {
       "tag": "$REPLACE_rito",
       "family": "enclitic",
       "status": "supported",
-      "train": 2505,
-      "dev": 539,
-      "synthetic_test": 520,
-      "eligible_clean_sentences": 3564,
-      "positions": 3573,
-      "candidates": 3573,
+      "train": 2509,
+      "dev": 554,
+      "synthetic_test": 550,
+      "eligible_clean_sentences": 3613,
+      "positions": 3622,
+      "candidates": 3622,
+      "candidates_by_split": {
+        "train": 2515,
+        "dev": 555,
+        "synthetic_test": 552
+      },
       "reason": ""
     },
     {
       "tag": "$REPLACE_riyan",
       "family": "enclitic",
       "status": "supported",
-      "train": 1342,
-      "dev": 265,
-      "synthetic_test": 293,
-      "eligible_clean_sentences": 1900,
-      "positions": 1902,
-      "candidates": 1902,
+      "train": 1352,
+      "dev": 294,
+      "synthetic_test": 285,
+      "eligible_clean_sentences": 1931,
+      "positions": 1933,
+      "candidates": 1933,
+      "candidates_by_split": {
+        "synthetic_test": 285,
+        "train": 1352,
+        "dev": 296
+      },
       "reason": ""
     },
     {
@@ -163,6 +226,7 @@
       "eligible_clean_sentences": 0,
       "positions": 0,
       "candidates": 0,
+      "candidates_by_split": {},
       "reason": "no reviewed Filipino construction resource is frozen"
     },
     {
@@ -175,6 +239,7 @@
       "eligible_clean_sentences": 0,
       "positions": 0,
       "candidates": 0,
+      "candidates_by_split": {},
       "reason": "no reviewed Filipino construction resource is frozen"
     },
     {
@@ -187,6 +252,7 @@
       "eligible_clean_sentences": 0,
       "positions": 0,
       "candidates": 0,
+      "candidates_by_split": {},
       "reason": "no reviewed Filipino construction resource is frozen"
     },
     {
@@ -199,6 +265,7 @@
       "eligible_clean_sentences": 0,
       "positions": 0,
       "candidates": 0,
+      "candidates_by_split": {},
       "reason": "no reviewed Filipino construction resource is frozen"
     },
     {
@@ -211,18 +278,24 @@
       "eligible_clean_sentences": 0,
       "positions": 0,
       "candidates": 0,
+      "candidates_by_split": {},
       "reason": "no reviewed Filipino construction resource is frozen"
     },
     {
       "tag": "$DELETE",
       "family": "duplicate_word",
       "status": "supported",
-      "train": 290284,
-      "dev": 62243,
-      "synthetic_test": 62278,
-      "eligible_clean_sentences": 414805,
-      "positions": 2953343,
-      "candidates": 2953343,
+      "train": 290220,
+      "dev": 62150,
+      "synthetic_test": 62226,
+      "eligible_clean_sentences": 414596,
+      "positions": 2952383,
+      "candidates": 2952383,
+      "candidates_by_split": {
+        "dev": 443670,
+        "train": 2066023,
+        "synthetic_test": 442690
+      },
       "reason": ""
     },
     {
@@ -235,6 +308,7 @@
       "eligible_clean_sentences": 0,
       "positions": 0,
       "candidates": 0,
+      "candidates_by_split": {},
       "reason": "no frozen reviewed verb paradigm resource is available"
     },
     {
@@ -247,6 +321,7 @@
       "eligible_clean_sentences": 0,
       "positions": 0,
       "candidates": 0,
+      "candidates_by_split": {},
       "reason": "no frozen reviewed verb paradigm resource is available"
     },
     {
@@ -259,6 +334,7 @@
       "eligible_clean_sentences": 0,
       "positions": 0,
       "candidates": 0,
+      "candidates_by_split": {},
       "reason": "no frozen reviewed verb paradigm resource is available"
     },
     {
@@ -271,6 +347,7 @@
       "eligible_clean_sentences": 0,
       "positions": 0,
       "candidates": 0,
+      "candidates_by_split": {},
       "reason": "no frozen reviewed verb paradigm resource is available"
     },
     {
@@ -283,6 +360,7 @@
       "eligible_clean_sentences": 0,
       "positions": 0,
       "candidates": 0,
+      "candidates_by_split": {},
       "reason": "no frozen reviewed verb paradigm resource is available"
     },
     {
@@ -295,6 +373,7 @@
       "eligible_clean_sentences": 0,
       "positions": 0,
       "candidates": 0,
+      "candidates_by_split": {},
       "reason": "no frozen reviewed verb paradigm resource is available"
     },
     {
@@ -307,6 +386,7 @@
       "eligible_clean_sentences": 0,
       "positions": 0,
       "candidates": 0,
+      "candidates_by_split": {},
       "reason": "no frozen reviewed verb paradigm resource is available"
     },
     {
@@ -319,162 +399,228 @@
       "eligible_clean_sentences": 0,
       "positions": 0,
       "candidates": 0,
+      "candidates_by_split": {},
       "reason": "no frozen reviewed verb paradigm resource is available"
     },
     {
       "tag": "$ADD_PUNC_EMARK",
       "family": "punctuation",
       "status": "supported",
-      "train": 8925,
-      "dev": 1808,
-      "synthetic_test": 1841,
-      "eligible_clean_sentences": 12574,
-      "positions": 12574,
-      "candidates": 12574,
+      "train": 8741,
+      "dev": 1940,
+      "synthetic_test": 1798,
+      "eligible_clean_sentences": 12479,
+      "positions": 12479,
+      "candidates": 12479,
+      "candidates_by_split": {
+        "train": 8741,
+        "synthetic_test": 1798,
+        "dev": 1940
+      },
       "reason": ""
     },
     {
       "tag": "$ADD_PUNC_PERIOD",
       "family": "punctuation",
       "status": "supported",
-      "train": 282662,
-      "dev": 60631,
-      "synthetic_test": 60762,
-      "eligible_clean_sentences": 404055,
-      "positions": 404055,
-      "candidates": 404055,
+      "train": 282620,
+      "dev": 60502,
+      "synthetic_test": 60807,
+      "eligible_clean_sentences": 403929,
+      "positions": 403929,
+      "candidates": 403929,
+      "candidates_by_split": {
+        "dev": 60502,
+        "train": 282620,
+        "synthetic_test": 60807
+      },
       "reason": ""
     },
     {
       "tag": "$ADD_PUNC_QMARK",
       "family": "punctuation",
       "status": "supported",
-      "train": 10825,
-      "dev": 2363,
-      "synthetic_test": 2203,
-      "eligible_clean_sentences": 15391,
-      "positions": 15391,
-      "candidates": 15391,
+      "train": 10888,
+      "dev": 2326,
+      "synthetic_test": 2162,
+      "eligible_clean_sentences": 15376,
+      "positions": 15376,
+      "candidates": 15376,
+      "candidates_by_split": {
+        "dev": 2326,
+        "train": 10888,
+        "synthetic_test": 2162
+      },
       "reason": ""
     },
     {
       "tag": "$CHANGE_PUNC_EMARK",
       "family": "punctuation",
       "status": "supported",
-      "train": 8925,
-      "dev": 1808,
-      "synthetic_test": 1841,
-      "eligible_clean_sentences": 12574,
-      "positions": 12574,
-      "candidates": 12574,
+      "train": 8741,
+      "dev": 1940,
+      "synthetic_test": 1798,
+      "eligible_clean_sentences": 12479,
+      "positions": 12479,
+      "candidates": 12479,
+      "candidates_by_split": {
+        "train": 8741,
+        "synthetic_test": 1798,
+        "dev": 1940
+      },
       "reason": ""
     },
     {
       "tag": "$CHANGE_PUNC_PERIOD",
       "family": "punctuation",
       "status": "supported",
-      "train": 282662,
-      "dev": 60631,
-      "synthetic_test": 60762,
-      "eligible_clean_sentences": 404055,
-      "positions": 404055,
-      "candidates": 404055,
+      "train": 282620,
+      "dev": 60502,
+      "synthetic_test": 60807,
+      "eligible_clean_sentences": 403929,
+      "positions": 403929,
+      "candidates": 403929,
+      "candidates_by_split": {
+        "dev": 60502,
+        "train": 282620,
+        "synthetic_test": 60807
+      },
       "reason": ""
     },
     {
       "tag": "$CHANGE_PUNC_QMARK",
       "family": "punctuation",
       "status": "supported",
-      "train": 10825,
-      "dev": 2363,
-      "synthetic_test": 2203,
-      "eligible_clean_sentences": 15391,
-      "positions": 15391,
-      "candidates": 15391,
+      "train": 10888,
+      "dev": 2326,
+      "synthetic_test": 2162,
+      "eligible_clean_sentences": 15376,
+      "positions": 15376,
+      "candidates": 15376,
+      "candidates_by_split": {
+        "dev": 2326,
+        "train": 10888,
+        "synthetic_test": 2162
+      },
       "reason": ""
     },
     {
       "tag": "$TRANSFORM_CASE_CAPITAL",
       "family": "casing",
       "status": "supported",
-      "train": 268042,
-      "dev": 57438,
-      "synthetic_test": 57468,
-      "eligible_clean_sentences": 382948,
-      "positions": 382948,
-      "candidates": 382948,
+      "train": 268005,
+      "dev": 57367,
+      "synthetic_test": 57373,
+      "eligible_clean_sentences": 382745,
+      "positions": 382745,
+      "candidates": 382745,
+      "candidates_by_split": {
+        "dev": 57367,
+        "train": 268005,
+        "synthetic_test": 57373
+      },
       "reason": ""
     },
     {
       "tag": "$TRANSFORM_CASE_LOWER",
       "family": "casing",
       "status": "supported",
-      "train": 288540,
-      "dev": 61888,
-      "synthetic_test": 61944,
-      "eligible_clean_sentences": 412372,
-      "positions": 2864399,
-      "candidates": 2864399,
+      "train": 288576,
+      "dev": 61727,
+      "synthetic_test": 61866,
+      "eligible_clean_sentences": 412169,
+      "positions": 2863475,
+      "candidates": 2863475,
+      "candidates_by_split": {
+        "dev": 430205,
+        "train": 2003892,
+        "synthetic_test": 429378
+      },
       "reason": ""
     },
     {
       "tag": "$APPEND_t1",
       "family": "missing_word",
       "status": "supported",
-      "train": 290284,
-      "dev": 62243,
-      "synthetic_test": 62278,
-      "eligible_clean_sentences": 414805,
-      "positions": 2953343,
-      "candidates": 2953343,
+      "train": 290220,
+      "dev": 62150,
+      "synthetic_test": 62226,
+      "eligible_clean_sentences": 414596,
+      "positions": 2952383,
+      "candidates": 2952383,
+      "candidates_by_split": {
+        "dev": 443670,
+        "train": 2066023,
+        "synthetic_test": 442690
+      },
       "reason": ""
     },
     {
       "tag": "$REPLACE_nila",
       "family": "pronoun",
       "status": "supported",
-      "train": 17120,
-      "dev": 3783,
-      "synthetic_test": 3683,
-      "eligible_clean_sentences": 24586,
-      "positions": 26309,
-      "candidates": 26309,
+      "train": 17151,
+      "dev": 3784,
+      "synthetic_test": 3639,
+      "eligible_clean_sentences": 24574,
+      "positions": 26297,
+      "candidates": 26297,
+      "candidates_by_split": {
+        "dev": 4077,
+        "train": 18357,
+        "synthetic_test": 3863
+      },
       "reason": ""
     },
     {
       "tag": "$REPLACE_niya",
       "family": "pronoun",
       "status": "supported",
-      "train": 37575,
-      "dev": 8096,
-      "synthetic_test": 8067,
-      "eligible_clean_sentences": 53738,
-      "positions": 62248,
-      "candidates": 62248,
+      "train": 37658,
+      "dev": 7946,
+      "synthetic_test": 8122,
+      "eligible_clean_sentences": 53726,
+      "positions": 62235,
+      "candidates": 62235,
+      "candidates_by_split": {
+        "dev": 9236,
+        "train": 43622,
+        "synthetic_test": 9377
+      },
       "reason": ""
     },
     {
       "tag": "$REPLACE_sila",
       "family": "pronoun",
       "status": "supported",
-      "train": 12535,
-      "dev": 2747,
-      "synthetic_test": 2702,
-      "eligible_clean_sentences": 17984,
-      "positions": 19167,
-      "candidates": 19167,
+      "train": 12605,
+      "dev": 2652,
+      "synthetic_test": 2722,
+      "eligible_clean_sentences": 17979,
+      "positions": 19162,
+      "candidates": 19162,
+      "candidates_by_split": {
+        "dev": 2810,
+        "train": 13461,
+        "synthetic_test": 2891
+      },
       "reason": ""
     },
     {
       "tag": "$REPLACE_siya",
       "family": "pronoun",
       "status": "supported",
-      "train": 30026,
-      "dev": 6490,
-      "synthetic_test": 6363,
-      "eligible_clean_sentences": 42879,
-      "positions": 48108,
-      "candidates": 48108,
+      "train": 30154,
+      "dev": 6349,
+      "synthetic_test": 6366,
+      "eligible_clean_sentences": 42869,
+      "positions": 48098,
+      "candidates": 48098,
+      "candidates_by_split": {
+        "train": 33785,
+        "dev": 7153,
+        "synthetic_test": 7160
+      },
       "reason": ""
     }
   ],

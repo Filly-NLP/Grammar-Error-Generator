@@ -1,0 +1,17 @@
+{
+  "status": "incomplete",
+  "reason": "review manifest does not exist",
+  "review_manifest": "D:\\files\\Online Classes\\College\\4th Year\\random\\Grammar-Error-Generator\\reports\\pilot_review_manifest.json",
+  "pilot_report": "D:\\files\\Online Classes\\College\\4th Year\\random\\Grammar-Error-Generator\\reports\\pilot_report.json",
+  "pilot_output": "D:\\files\\Online Classes\\College\\4th Year\\random\\Grammar-Error-Generator\\data\\pilot\\gec_pilot_100k.parquet",
+  "review_sample": "D:\\files\\Online Classes\\College\\4th Year\\random\\Grammar-Error-Generator\\reports\\pilot_review_sample.jsonl",
+  "current_hashes": {
+    "pilot_report_sha256": "cc60113535e920930ef5e25e8bbd3f85ccfac297fa96355ef28b5ff341692fdc",
+    "pilot_output_sha256": "8af53d557b0b7599457a5c214d31ef47ef10b15f1d2ff34a1469850b0514e4ad",
+    "review_sample_sha256": "93d3c21e8fa4ec3287162619098bec1c48fd6130baf8131b2a39b4d4d55d65f7"
+  },
+  "manifest_hash": null,
+  "checked_at": "2026-09-08T05:53:04+00:00",
+  "allowed": false,
+  "attempted_output": "D:\\files\\Online Classes\\College\\4th Year\\random\\Grammar-Error-Generator\\data\\candidates\\preflight.parquet"
+}

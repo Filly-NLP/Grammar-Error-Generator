@@ -7,3 +7,12 @@ data/interim/
 *.jsonl
 # The supplied source corpus is local input and must never be committed.
 corpus.db
+
+# Large local supplementary corpus input; keep physical files off Git.
+balitanlp.db
+
+# SQLite journal sidecars for the local corpus inputs above.
+corpus.db-wal
+corpus.db-shm
+balitanlp.db-wal
+balitanlp.db-shm
