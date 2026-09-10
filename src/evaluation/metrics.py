@@ -339,7 +339,21 @@ def per_tag_metrics(samples: Sequence[Mapping[str, Any]], predictions: Iterable[
     return result
 
 
-def _breakdown(samples: Sequence[Mapping[str, Any]], predictions: Mapping[tuple[str, str], PredictionArtifact], condition: str, field: str) -> dict[str, dict[str, Any]]:
+def _breakdown(
+    samples: Sequence[Mapping[str, Any]],
+    predictions: Mapping[tuple[str, str], PredictionArtifact],
+    condition: str,
+    field: str,
+    *,
+    baseline: str = "raw_to_final",
+) -> dict[str, dict[str, Any]]:
+    """Score one category breakdown from an explicitly named baseline.
+
+    The primary A/B end-to-end comparison is always ``raw_to_final``.  A
+    separate ``gec_input`` view remains useful for diagnosing the GEC module,
+    but must never be mislabeled as an end-to-end result because condition B
+    has a different GEC input after normalization.
+    """
     grouped: dict[str, list[tuple[str, str, str]]] = defaultdict(list)
     for sample in samples:
         if sample.get("source_type") == "clean_control":
@@ -349,12 +363,18 @@ def _breakdown(samples: Sequence[Mapping[str, Any]], predictions: Mapping[tuple[
         if artifact is None:
             raise ValueError(f"missing prediction for breakdown: {sample['sample_id']}")
         values = sample.get(field, [])
-        if field == "error_families" and not values:
+        if field in {"error_families", "grammar_families"} and not values:
             family_by_tag = {item.id: item.family for item in registry()}
             values = [family_by_tag[tag] for tag in sample.get("grammar_tags", []) if tag in family_by_tag]
         values = values if isinstance(values, list) else [values]
+        if baseline == "raw_to_final":
+            source = str(sample["raw_informal"])
+        elif baseline == "gec_input":
+            source = artifact.gec_input
+        else:
+            raise ValueError(f"unknown metric baseline: {baseline}")
         for value in values:
-            grouped[str(value)].append((artifact.gec_input, str(sample["gold_final_correct"]), artifact.gec_output))
+            grouped[str(value)].append((source, str(sample["gold_final_correct"]), artifact.gec_output))
     return {key: _aggregate(rows) for key, rows in sorted(grouped.items())}
 
 
@@ -387,12 +407,31 @@ def evaluate_predictions(samples: Sequence[Mapping[str, Any]], predictions: Iter
             result["sentence_level"].append({"sample_id": str(sample["sample_id"]), "condition": condition, "gec_input": artifact.gec_input, "gec_output": artifact.gec_output, "gold_final_correct": str(sample["gold_final_correct"]), "exact_correct": artifact.gec_output == str(sample["gold_final_correct"]), "source_type": sample.get("source_type")})
     for condition in ("A", "B", "C"):
         rows = _condition_rows(samples, prediction_map, condition)
+        end_to_end_breakdowns = {
+            "normalization_type": _breakdown(samples, prediction_map, condition, "normalization_types", baseline="raw_to_final"),
+            "source_type": _breakdown(samples, prediction_map, condition, "source_type", baseline="raw_to_final"),
+            "error_family": _breakdown(samples, prediction_map, condition, "grammar_families", baseline="raw_to_final"),
+        }
+        gec_input_breakdowns = {
+            "normalization_type": _breakdown(samples, prediction_map, condition, "normalization_types", baseline="gec_input"),
+            "source_type": _breakdown(samples, prediction_map, condition, "source_type", baseline="gec_input"),
+            "error_family": _breakdown(samples, prediction_map, condition, "grammar_families", baseline="gec_input"),
+        }
         result["conditions"][condition] = {
             "gec": _aggregate(rows),
             "end_to_end": _aggregate([(str(sample["raw_informal"]), str(sample["gold_final_correct"]), prediction_map[(str(sample["sample_id"]), CONDITION_NAMES[condition])].gec_output) for sample in samples if sample.get("source_type") != "clean_control"]),
-            "breakdown_by_normalization_type": _breakdown(samples, prediction_map, condition, "normalization_types"),
-            "breakdown_by_source_type": _breakdown(samples, prediction_map, condition, "source_type"),
-            "breakdown_by_error_family": _breakdown(samples, prediction_map, condition, "error_families"),
+            # Explicit names are the canonical report contract.
+            "end_to_end_breakdown_by_normalization_type": end_to_end_breakdowns["normalization_type"],
+            "end_to_end_breakdown_by_source_type": end_to_end_breakdowns["source_type"],
+            "end_to_end_breakdown_by_error_family": end_to_end_breakdowns["error_family"],
+            "gec_input_breakdown_by_normalization_type": gec_input_breakdowns["normalization_type"],
+            "gec_input_breakdown_by_source_type": gec_input_breakdowns["source_type"],
+            "gec_input_breakdown_by_error_family": gec_input_breakdowns["error_family"],
+            # Backwards-compatible aliases.  These are explicitly the
+            # primary raw-to-final end-to-end view, not the GEC-input view.
+            "breakdown_by_normalization_type": end_to_end_breakdowns["normalization_type"],
+            "breakdown_by_source_type": end_to_end_breakdowns["source_type"],
+            "breakdown_by_error_family": end_to_end_breakdowns["error_family"],
         }
         if include_per_tag:
             result["conditions"][condition]["per_tag"] = per_tag_metrics(samples, prediction_map.values(), condition=condition)

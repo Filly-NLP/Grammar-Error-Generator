@@ -20,6 +20,12 @@ Both `source_type=authentic` and `source_type=controlled` must be present.
 The separate clean-control file contains 200--500 rows.  Every row is
 `split=test_only`; the freeze validator rejects any other split.
 
+The canonical annotation fields are `grammar_families` and
+`real_or_controlled` alongside `grammar_tags` and `source_type`. The loader
+accepts the historical `error_families` alias only at the input boundary,
+rejects disagreement, and removes it from frozen rows. It also verifies that
+each family matches the registered family of every grammar tag.
+
 ## Required row evidence
 
 Each row records `raw_informal`, `gold_normalized_errorful`, and
@@ -61,6 +67,37 @@ in the freeze manifest.
 
 The current repository intentionally has no authentic annotations or frozen
 normalizer inventory, so the real freeze preflight is expected to fail.
+
+## Controlled-noise path
+
+`src/evaluation_noise/injector.py` provides a separate, deterministic,
+resource-driven injector for controlled rows. It consumes only a frozen,
+reviewed literal-rule resource and applies reverse normalization edits to an
+already-created `gold_normalized_errorful` (`N*`). The helper records exact
+replayable `R -> N*` edits, protects supplied grammar spans, and distinguishes
+`seen_rule` from `unseen_pattern` using a frozen normalizer-rule inventory.
+`mixed_noise` requires two non-overlapping reviewed rules from distinct noise
+categories.
+
+The normalizer inventory itself must have `status=frozen`, version/source/
+license metadata, a non-empty rules list, and approved rule entries. Each
+normalization edit records `rule_id`, `pattern_id`, and `seen_status`; the
+validator cross-checks every one against that inventory, checks the top-level
+rule/pattern lists, and rejects mixed rows whose edits disagree on seen versus
+unseen status. An inventory supplied as an arbitrary list/set of IDs is
+rejected.
+
+`scripts/build_controlled_evaluation.py` emits rows marked
+`generation_status=pending_annotation`; blank annotation fields are
+intentional, and the existing freeze validator blocks them until two distinct
+annotators and adjudication are supplied. No authentic public text or rule
+resource is included in this repository. A supplied reviewed rule resource
+can be frozen with `scripts/freeze_noise_resource.py` after the operator
+provides the reviewer, date, source, and license explicitly.
+
+The primary A/B end-to-end reports and paired bootstrap use the common raw
+input baseline (`R -> G`). Separate `gec_input_breakdown_*` fields expose the
+diagnostic GEC-input baseline; those fields are not end-to-end scores.
 
 Freeze validates the output and blocker-report destinations against every input
 and optional leakage dependency, including existing hard-link/symlink aliases,

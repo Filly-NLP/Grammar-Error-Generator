@@ -10,11 +10,27 @@ pilot review is missing, incomplete, stale, marked for revision, or rejected.
 It also refuses to overwrite an existing shard or manifest.
 
 `--max-rows` is mandatory for production: every shard has an explicit finite
-bound. Rows are written incrementally with a Parquet writer, and exact output
-pair collisions are tracked in a temporary SQLite store rather than an
-unbounded in-memory set. The shard is published through a unique temporary
-file and atomic rename under an exclusive lock; failed runs remove temporary
-files and locks.
+bound. The assigned shard is scanned completely; candidates are retained in
+bounded per-split/per-tag reservoirs ranked by a stable SHA-256 digest. This
+means reversing Parquet row order cannot change the selected set, while rare
+tags receive capacity-aware slots before common tags consume the bound. Exact
+output-pair collisions are checked after ranking and counted separately.
+
+When `phase9.candidate_buffer_ratio` (or the legacy
+`dataset.candidate_buffer_ratio`) is configured, the requested bound is
+multiplied by that ratio and recorded as `buffer_rows`; the default root
+configuration uses `1.25`. A shard manifest records per-group requests and
+shortfalls, selected counts, and bounded rejection samples. Aggregate shards
+with `scripts/aggregate_candidates.py` before Phase 10 to obtain the explicit
+capacity-adequacy gate. The aggregate validates that every shard index in the
+declared set exists exactly once, each shard file and sibling manifest hash
+matches, all required Phase 4/5/review/config/resource dependencies agree,
+and every shard is marked `production_ready=true`. Its canonical payload hash
+is bound as `aggregate_sha256`; Phase 10 recomputes that hash and rejects
+stale, incomplete, or mismatched aggregates before reading candidate rows.
+
+The shard is published through a unique temporary file and atomic rename under
+an exclusive lock; failed runs remove temporary files and locks.
 
 Example after linguistic approval:
 
@@ -48,3 +64,8 @@ SQLite hash, so a relocated/custom report chain cannot silently mix a different
 source database. All input, dependency, output,
 manifest, review, and blocked-report destinations are checked for path,
 symlink, and hard-link aliases before the review gate or any writer runs.
+
+Generation reports distinguish ordinary `not_applicable` sentence/tag misses
+from constructed-candidate rejections such as alignment failures, resource
+problems, collisions, and quota/buffer exclusions. Counters and a bounded
+sample are propagated through Phases 6, 8, 9, and 10.

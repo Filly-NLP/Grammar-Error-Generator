@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from src.geg.alignment import diff_spans
-from src.geg.tags import require_registered
+from src.geg.tags import registry, require_registered
 
 
 INFORMAL_COUNTS = {
@@ -31,6 +31,7 @@ CONTROL_MAX = 500
 SPLIT = "test_only"
 RULE_STATUSES = frozenset({"seen_rule", "unseen_pattern"})
 SOURCE_TYPES = frozenset({"authentic", "controlled", "clean_control"})
+REAL_OR_CONTROLLED = frozenset({"real", "controlled"})
 
 
 class EvaluationValidationError(ValueError):
@@ -155,27 +156,93 @@ def _require_provenance(record: Mapping[str, Any]) -> None:
         raise EvaluationValidationError("provenance.captured_at must be non-empty")
 
 
-def _validate_rule_inventory(inventory: Mapping[str, Any]) -> set[str]:
+def _validate_rule_inventory(inventory: Mapping[str, Any]) -> dict[str, Any]:
     inventory = _object(inventory, "rule_inventory")
     if inventory.get("status") != "frozen":
         raise EvaluationValidationError("rule_inventory.status must be 'frozen'")
     _text(inventory.get("version"), "rule_inventory.version")
     rules = _list(inventory.get("rules"), "rule_inventory.rules")
     ids: set[str] = set()
+    patterns_by_rule: dict[str, set[str]] = {}
+    pattern_ids: set[str] = set()
     for index, rule in enumerate(rules):
         item = _object(rule, f"rule_inventory.rules[{index}]")
         rule_id = _text(item.get("id"), f"rule_inventory.rules[{index}].id")
+        review_status = str(item.get("review_status", "approved"))
+        if review_status != "approved":
+            raise EvaluationValidationError(f"rule_inventory.rules[{index}] is not approved")
         if rule_id in ids:
             raise EvaluationValidationError(f"duplicate normalizer rule id: {rule_id}")
         ids.add(rule_id)
+        raw_patterns = item.get("pattern_ids")
+        if raw_patterns is None:
+            raw_patterns = [item.get("pattern_id", rule_id)]
+        if not isinstance(raw_patterns, list) or not raw_patterns or any(not str(pattern).strip() for pattern in raw_patterns):
+            raise EvaluationValidationError(f"rule_inventory.rules[{index}] requires pattern_id(s)")
+        patterns = {str(pattern) for pattern in raw_patterns}
+        patterns_by_rule[rule_id] = patterns
+        pattern_ids.update(patterns)
     if not ids:
         raise EvaluationValidationError("rule_inventory.rules must contain at least one frozen rule")
     _text(inventory.get("source"), "rule_inventory.source")
     _text(inventory.get("license"), "rule_inventory.license")
-    return ids
+    return {"rule_ids": ids, "patterns_by_rule": patterns_by_rule, "pattern_ids": pattern_ids}
 
 
-def _validate_record(record: Mapping[str, Any], rule_ids: set[str], *, index: int) -> tuple[str, bool, set[str]]:
+def canonicalize_record(record: Mapping[str, Any]) -> dict[str, Any]:
+    """Normalize legacy evaluation aliases into the canonical schema.
+
+    ``grammar_families`` and ``real_or_controlled`` are the plan-facing
+    fields.  Older templates used ``error_families`` and omitted the latter;
+    those inputs are accepted only as a compatibility boundary and are
+    immediately normalized.  If both family aliases are supplied, they must
+    agree exactly (ignoring ordering), otherwise the row is unsafe to use.
+    """
+
+    item = dict(record)
+    family_values = item.get("grammar_families")
+    legacy_values = item.get("error_families")
+    if family_values is not None and legacy_values is not None:
+        if list(family_values) != list(legacy_values):
+            raise EvaluationValidationError("grammar_families and deprecated error_families disagree")
+    if family_values is None and legacy_values is not None:
+        family_values = legacy_values
+    if family_values is None:
+        tags = item.get("grammar_tags") or []
+        family_by_tag = {entry.id: entry.family for entry in registry()}
+        family_values = [family_by_tag[str(tag)] for tag in tags if str(tag) in family_by_tag]
+    if not isinstance(family_values, list):
+        raise EvaluationValidationError("grammar_families must be a list")
+    item["grammar_families"] = [str(value) for value in family_values]
+    # Remove the deprecated alias from canonical frozen rows.
+    item.pop("error_families", None)
+
+    source_type = item.get("source_type")
+    roc = item.get("real_or_controlled")
+    if source_type is None and roc is None:
+        raise EvaluationValidationError("record requires source_type or real_or_controlled")
+    if source_type is None:
+        source_type = "authentic" if str(roc).lower() in {"real", "authentic"} else "controlled"
+    source_type = str(source_type)
+    if source_type not in SOURCE_TYPES:
+        raise EvaluationValidationError(f"source_type is not recognized: {source_type!r}")
+    expected_roc = "real" if source_type == "authentic" else "controlled"
+    if roc is None:
+        roc = expected_roc
+    roc = str(roc).lower()
+    if roc == "authentic":
+        roc = "real"
+    if roc not in REAL_OR_CONTROLLED:
+        raise EvaluationValidationError(f"real_or_controlled is not recognized: {roc!r}")
+    if roc != expected_roc:
+        raise EvaluationValidationError("source_type and real_or_controlled disagree")
+    item["source_type"] = source_type
+    item["real_or_controlled"] = roc
+    return item
+
+
+def _validate_record(record: Mapping[str, Any], inventory: Mapping[str, Any], *, index: int) -> tuple[str, bool, set[str]]:
+    record = canonicalize_record(record)
     prefix = f"record[{index}]"
     sample_id = _text(record.get("sample_id"), f"{prefix}.sample_id")
     raw = _text(record.get("raw_informal"), f"{prefix}.raw_informal")
@@ -226,6 +293,11 @@ def _validate_record(record: Mapping[str, Any], rule_ids: set[str], *, index: in
     edit_tags = {str(edit["tag"]) for edit in grammar_edits}
     if edit_tags != tags:
         raise EvaluationValidationError(f"{prefix}.grammar_tags do not match tagged grammar edits")
+    family_by_tag = {entry.id: entry.family for entry in registry()}
+    supplied_families = Counter(str(value) for value in _list(record.get("grammar_families"), f"{prefix}.grammar_families"))
+    expected_families = Counter(family_by_tag[tag] for tag in tags)
+    if supplied_families != expected_families:
+        raise EvaluationValidationError(f"{prefix}.grammar_families do not match grammar_tags")
     if source_type == "clean_control" and (normalization_edits or grammar_edits or tags):
         raise EvaluationValidationError(f"{prefix} clean control must have no correction edits/tags")
     if source_type != "clean_control":
@@ -233,16 +305,50 @@ def _validate_record(record: Mapping[str, Any], rule_ids: set[str], *, index: in
         status = _text(record.get("normalization_rule_seen_status"), f"{prefix}.normalization_rule_seen_status")
         if status not in RULE_STATUSES:
             raise EvaluationValidationError(f"{prefix} has unknown normalization rule status")
-        expected = "seen_rule" if rule_id in rule_ids else "unseen_pattern"
-        if expected != status:
-            raise EvaluationValidationError(f"{prefix} rule status is {status!r}; inventory implies {expected!r}")
+        edit_rule_ids: list[str] = []
+        edit_pattern_ids: list[str] = []
+        edit_statuses: list[str] = []
+        known_rule_ids = set(inventory["rule_ids"])
+        patterns_by_rule = inventory["patterns_by_rule"]
+        known_patterns = set(inventory["pattern_ids"])
+        for edit_index, edit in enumerate(normalization_edits):
+            edit_rule_id = _text(edit.get("rule_id"), f"{prefix}.normalization_edits[{edit_index}].rule_id")
+            edit_pattern_id = _text(edit.get("pattern_id"), f"{prefix}.normalization_edits[{edit_index}].pattern_id")
+            edit_status = _text(edit.get("seen_status"), f"{prefix}.normalization_edits[{edit_index}].seen_status")
+            if edit_status not in RULE_STATUSES:
+                raise EvaluationValidationError(f"{prefix}.normalization_edits[{edit_index}] has unknown seen_status")
+            exact_patterns = patterns_by_rule.get(edit_rule_id)
+            expected = (edit_pattern_id in exact_patterns) if exact_patterns is not None else (edit_pattern_id in known_patterns)
+            expected_status = "seen_rule" if expected else "unseen_pattern"
+            if edit_status != expected_status:
+                raise EvaluationValidationError(
+                    f"{prefix}.normalization_edits[{edit_index}] seen_status {edit_status!r} disagrees with frozen inventory"
+                )
+            edit_rule_ids.append(edit_rule_id)
+            edit_pattern_ids.append(edit_pattern_id)
+            edit_statuses.append(edit_status)
+        if len(set(edit_statuses)) != 1:
+            raise EvaluationValidationError(f"{prefix} mixed normalization edits have inconsistent seen_status")
+        if status != edit_statuses[0]:
+            raise EvaluationValidationError(f"{prefix} normalization_rule_seen_status disagrees with per-edit status")
+        expected_rule_ids = record.get("normalization_rule_ids")
+        expected_pattern_ids = record.get("normalization_pattern_ids")
+        if not isinstance(expected_rule_ids, list) or expected_rule_ids != edit_rule_ids:
+            raise EvaluationValidationError(f"{prefix}.normalization_rule_ids do not match normalization edits")
+        if not isinstance(expected_pattern_ids, list) or expected_pattern_ids != edit_pattern_ids:
+            raise EvaluationValidationError(f"{prefix}.normalization_pattern_ids do not match normalization edits")
+        if rule_id != edit_rule_ids[0]:
+            raise EvaluationValidationError(f"{prefix}.normalization_rule_id does not match first normalization edit")
+        pattern_id = _text(record.get("normalization_pattern_id"), f"{prefix}.normalization_pattern_id")
+        if pattern_id != edit_pattern_ids[0]:
+            raise EvaluationValidationError(f"{prefix}.normalization_pattern_id does not match first normalization edit")
     else:
         rule_id = ""
     _text(record.get("notes"), f"{prefix}.notes", allow_empty=True)
     return sample_id, source_type == "clean_control", types
 
 
-def _read_jsonl_bytes(data: bytes, source: str) -> list[dict[str, Any]]:
+def _read_jsonl_bytes(data: bytes, source: str, *, canonicalize: bool = True) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     try:
         text = data.decode("utf-8")
@@ -257,14 +363,18 @@ def _read_jsonl_bytes(data: bytes, source: str) -> list[dict[str, Any]]:
             raise EvaluationValidationError(f"invalid JSON on {source}:{line_number}") from error
         if not isinstance(item, dict):
             raise EvaluationValidationError(f"JSONL row is not an object on {source}:{line_number}")
-        rows.append(item)
+        # Normalize aliases at the evaluation-data boundary so frozen
+        # manifests expose a single canonical schema.  Generic leakage files
+        # are intentionally parsed without this requirement because they are
+        # only scanned for IDs/texts.
+        rows.append(canonicalize_record(item) if canonicalize else item)
     return rows
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         raise EvaluationValidationError(f"evaluation input does not exist: {path}")
-    return _read_jsonl_bytes(path.read_bytes(), str(path))
+    return _read_jsonl_bytes(path.read_bytes(), str(path), canonicalize=False)
 
 
 def load_records_bytes(data: bytes, *, source: str = "<bytes>") -> list[dict[str, Any]]:
@@ -274,7 +384,9 @@ def load_records_bytes(data: bytes, *, source: str = "<bytes>") -> list[dict[str
 
 
 def load_records(path: Path) -> list[dict[str, Any]]:
-    return _read_jsonl(path)
+    if not path.exists():
+        raise EvaluationValidationError(f"evaluation input does not exist: {path}")
+    return _read_jsonl_bytes(path.read_bytes(), str(path), canonicalize=True)
 
 
 def _extract_external_records(path: Path) -> tuple[set[str], set[str]]:
@@ -363,7 +475,7 @@ def validate_no_gec_leakage(records: Sequence[Mapping[str, Any]], *, forbidden_c
 
 
 def validate_dataset(records: Sequence[Mapping[str, Any]], rule_inventory: Mapping[str, Any], *, clean_controls: Sequence[Mapping[str, Any]] = (), forbidden_clean_ids: set[str] | None = None, forbidden_texts: set[str] | None = None, gec_train: Path | None = None, gec_dev: Path | None = None, normalizer_train: Path | None = None, require_full_composition: bool = True) -> ValidationSummary:
-    rule_ids = _validate_rule_inventory(rule_inventory)
+    inventory = _validate_rule_inventory(rule_inventory)
     if not records:
         raise EvaluationValidationError("informal evaluation set is empty")
     seen_ids: set[str] = set()
@@ -372,7 +484,8 @@ def validate_dataset(records: Sequence[Mapping[str, Any]], rule_inventory: Mappi
     statuses: Counter[str] = Counter()
     tag_counts: Counter[str] = Counter()
     for index, record in enumerate(records):
-        sample_id, is_control, types = _validate_record(record, rule_ids, index=index)
+        record = canonicalize_record(record)
+        sample_id, is_control, types = _validate_record(record, inventory, index=index)
         if is_control:
             raise EvaluationValidationError("clean controls must be supplied separately from informal records")
         if sample_id in seen_ids:
@@ -386,7 +499,8 @@ def validate_dataset(records: Sequence[Mapping[str, Any]], rule_inventory: Mappi
     controls = list(clean_controls)
     control_ids: set[str] = set()
     for index, record in enumerate(controls):
-        sample_id, is_control, _ = _validate_record(record, rule_ids, index=index)
+        record = canonicalize_record(record)
+        sample_id, is_control, _ = _validate_record(record, inventory, index=index)
         if not is_control:
             raise EvaluationValidationError("clean control rows must have source_type=clean_control")
         if sample_id in seen_ids or sample_id in control_ids:

@@ -14,12 +14,15 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.geg.alignment import AlignmentResult, validate_replay
-from src.geg.config import config_hash as compute_config_hash, load_config
-from src.geg.generators import GENERATOR_VERSION, Candidate, all_tag_ids, generate_candidates
-from src.geg.hashing import sha256_file, sha256_files
+from src.geg.config import config_hash as compute_config_hash, load_config, resolve_runtime_config
+from src.geg.generators import GENERATOR_VERSION, GENERATOR_POLICY_STATUS, Candidate, all_tag_ids, generate_candidates, get_generator_context
+from src.geg.hashing import sha256_file, sha256_files, generator_dependency_hash
 from src.geg.ingest import normalize_text
 from src.geg.tags import require_registered, registry
+from src.geg.states import state_by_id
 from src.geg.artifacts import validate_destinations
+from src.geg.schema import gec_arrow_schema
+from src.geg.telemetry import REJECTION_SAMPLE_LIMIT
 
 
 PILOT_TARGETS = {"train": 70_000, "dev": 15_000, "synthetic_test": 15_000}
@@ -69,6 +72,28 @@ def _structurally_valid(candidate: Candidate) -> tuple[bool, str, AlignmentResul
         return False, "target_not_normalized", AlignmentResult(False, (), (), None, "target_not_normalized")
     if candidate.source_text != normalize_text(candidate.source_text):
         return False, "source_not_normalized", AlignmentResult(False, (), (), None, "source_not_normalized")
+    morphology_values = (
+        candidate.morphology_source_state, candidate.morphology_target_state,
+        candidate.morphology_lemma, candidate.morphology_resource_version,
+    )
+    morphology_tag = candidate.correction_tag.startswith("$TRANSFORM_VERB_")
+    if morphology_tag and not all(isinstance(value, str) and value for value in morphology_values):
+        return False, "incomplete_morphology_provenance", AlignmentResult(False, (), (), None, "incomplete_morphology_provenance")
+    if not morphology_tag and any(value is not None for value in morphology_values):
+        return False, "unexpected_morphology_provenance", AlignmentResult(False, (), (), None, "unexpected_morphology_provenance")
+    if morphology_tag:
+        try:
+            source_state = state_by_id(str(candidate.morphology_source_state))
+            target_state = state_by_id(str(candidate.morphology_target_state))
+        except ValueError:
+            return False, "invalid_morphology_state", AlignmentResult(False, (), (), None, "invalid_morphology_state")
+        if not target_state.can_be_target or target_state.correction_tag != candidate.correction_tag:
+            return False, "unsupported_morphology_target_state", AlignmentResult(False, (), (), None, "unsupported_morphology_target_state")
+        if source_state.id == target_state.id:
+            return False, "same_morphology_state", AlignmentResult(False, (), (), None, "same_morphology_state")
+        expected_resource_version = str(get_generator_context().morphology_manifest.get("resource_version", "")).strip()
+        if not expected_resource_version or candidate.morphology_resource_version != expected_resource_version:
+            return False, "morphology_resource_version_mismatch", AlignmentResult(False, (), (), None, "morphology_resource_version_mismatch")
     if candidate.generation_operation.get("type") not in {
         "replace", "duplicate", "append", "add_punctuation", "change_punctuation", "case",
     }:
@@ -130,11 +155,16 @@ def _record(
         "sqlite_rowid": clean.get("sqlite_rowid"),
         "seed": seed,
         "generator_version": GENERATOR_VERSION,
+        "generator_policy_status": GENERATOR_POLICY_STATUS,
         "pilot_builder_version": PILOT_BUILDER_VERSION,
         "config_hash": config_hash,
         "alignment_success": alignment.success,
         "quality_flags": json.dumps(["automated_structural_review_passed"], ensure_ascii=False),
         "confidence": candidate.confidence,
+        "morphology_source_state": candidate.morphology_source_state,
+        "morphology_target_state": candidate.morphology_target_state,
+        "morphology_lemma": candidate.morphology_lemma,
+        "morphology_resource_version": candidate.morphology_resource_version,
     }
 
 
@@ -182,9 +212,10 @@ def build_pilot(
     report_json: Path,
     report_markdown: Path,
     review_sample_path: Path,
-    seed: int = 20260905,
+    seed: int | None = None,
     config_hash: str = "",
     config_path: Path = Path("config/filly.yaml"),
+    allow_partial_generator_coverage: bool = False,
 ) -> dict[str, Any]:
     try:
         import pyarrow as pa
@@ -199,13 +230,26 @@ def build_pilot(
          "markdown_report": report_markdown, "review_sample": review_sample_path},
     )
     capacity = json.loads(capacity_report_path.resolve().read_text(encoding="utf-8"))
+    if capacity.get("production_ready") is False and not allow_partial_generator_coverage:
+        raise RuntimeError(
+            "capacity report is not production-ready: all 39 generator/resource paths "
+            "must be implemented and reviewed before Phase 8 can unlock production"
+        )
     input_sha256 = sha256_file(input_path)
-    generator_sha256 = sha256_files((Path("src/geg/generators.py").resolve(), Path("src/geg/alignment.py").resolve()))
+    generator_sha256 = generator_dependency_hash()
+    legacy_generator_sha256 = sha256_files((Path(__file__).resolve().parents[1] / "src/geg/generators.py", Path(__file__).resolve().parents[1] / "src/geg/alignment.py"))
     if capacity.get("input_sha256") != input_sha256:
         raise RuntimeError("stale capacity report: split input hash does not match; rerun Phase 6")
-    if capacity.get("generator_version") != GENERATOR_VERSION or capacity.get("generator_sha256") != generator_sha256:
+    expected_generator = capacity.get("generator_dependency_hash", capacity.get("generator_sha256"))
+    if capacity.get("production_ready") is True and expected_generator != generator_sha256:
+        raise RuntimeError("production capacity report must use the canonical generator dependency hash")
+    legacy_allowed = "production_ready" not in capacity and "generator_dependency_hash" not in capacity
+    if capacity.get("generator_version") != GENERATOR_VERSION or expected_generator != generator_sha256 and not (legacy_allowed and expected_generator == legacy_generator_sha256):
         raise RuntimeError("stale capacity report: generator version/hash does not match; rerun Phase 6")
-    current_config_hash = compute_config_hash(load_config(config_path.resolve()))
+    loaded_config = load_config(config_path.resolve())
+    runtime_config = resolve_runtime_config(loaded_config)
+    current_config_hash = compute_config_hash(loaded_config)
+    seed = int(runtime_config["runtime"]["seed"] if seed is None else seed)
     if capacity.get("config_hash") != current_config_hash:
         raise RuntimeError("stale capacity report: config hash does not match; rerun Phase 6")
     if not capacity.get("split_report_sha256") or not capacity.get("quality_manifest_sha256") or not capacity.get("input_sqlite_sha256"):
@@ -238,6 +282,22 @@ def build_pilot(
     fallback: dict[str, list[tuple[dict[str, Any], Candidate]]] = defaultdict(list)
     fallback_seen: set[tuple[str, str]] = set()
     rejected: Counter[str] = Counter()
+    not_applicable = 0
+    rejection_samples: list[dict[str, Any]] = []
+
+    def reject(reason: str, count: int = 1, **context: Any) -> None:
+        rejected[str(reason)] += int(count)
+        if len(rejection_samples) < REJECTION_SAMPLE_LIMIT:
+            sample = {key: value for key, value in context.items() if value is not None}
+            sample["reason"] = str(reason)
+            rejection_samples.append(sample)
+
+    def merge_generator_rejections(result: Any, *, split: str, clean_id: str, tag: str) -> None:
+        nonlocal not_applicable
+        if not result.candidates and result.status == "supported":
+            not_applicable += int(result.not_applicable or 1)
+        for reason, count in (result.rejected or {}).items():
+            reject(str(reason), int(count), split=split, clean_id=clean_id, tag=tag)
 
     columns = [
         "clean_id", "text", "split", "source_corpus", "publisher", "source_doc_id",
@@ -248,7 +308,7 @@ def build_pilot(
         for index in range(len(values["clean_id"])):
             split = str(values["split"][index])
             if split not in PILOT_TARGETS:
-                rejected["unknown_split"] += 1
+                reject("unknown_split", split=split, clean_id=str(values["clean_id"][index]))
                 continue
             clean = {name: values[name][index] for name in columns}
             for tag in tags:
@@ -261,14 +321,15 @@ def build_pilot(
                 ):
                     continue
                 result = generate_candidates(str(clean["text"]), tag, compute_alignment=False)
+                merge_generator_rejections(result, split=split, clean_id=str(clean["clean_id"]), tag=tag)
                 for candidate in result.candidates:
                     valid, reason, alignment = _structurally_valid(candidate)
                     if not valid:
-                        rejected[reason] += 1
+                        reject(reason, split=split, clean_id=str(clean["clean_id"]), tag=tag)
                         continue
                     pair_key = (candidate.source_text, candidate.target_text)
                     if pair_key in selected_pairs or pair_key in fallback_seen:
-                        rejected["output_pair_collision"] += 1
+                        reject("output_pair_collision", split=split, clean_id=str(clean["clean_id"]), tag=tag)
                         continue
                     current_tag = selected_by_tag[(split, tag)]
                     if current_tag < quotas[split].get(tag, 0) and selected_by_split[split] < PILOT_TARGETS[split]:
@@ -291,7 +352,7 @@ def build_pilot(
                 continue
             valid, reason, alignment = _structurally_valid(candidate)
             if not valid:
-                rejected[reason] += 1
+                reject(reason, split=split, clean_id=str(clean["clean_id"]), tag=candidate.correction_tag)
                 continue
             selected_pairs.add(pair_key)
             selected_by_split[split] += 1
@@ -314,6 +375,7 @@ def build_pilot(
                         if selected_by_split[split] >= PILOT_TARGETS[split]:
                             break
                         result = generate_candidates(str(clean["text"]), tag, compute_alignment=False)
+                        merge_generator_rejections(result, split=split, clean_id=str(clean["clean_id"]), tag=tag)
                         for candidate in result.candidates:
                             if selected_by_split[split] >= PILOT_TARGETS[split]:
                                 break
@@ -322,7 +384,7 @@ def build_pilot(
                                 continue
                             valid, reason, alignment = _structurally_valid(candidate)
                             if not valid:
-                                rejected[reason] += 1
+                                reject(reason, split=split, clean_id=str(clean["clean_id"]), tag=tag)
                                 continue
                             selected_pairs.add(pair_key)
                             selected_by_split[split] += 1
@@ -333,7 +395,7 @@ def build_pilot(
 
     selected.sort(key=lambda row: (SPLIT_ORDER[row["split"]], row["correction_tags"][0], row["clean_id"], row["pair_id"]))
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    table = pa.Table.from_pylist(selected)
+    table = pa.Table.from_pylist(selected, schema=gec_arrow_schema())
     pq.write_table(table, output_path)
 
     # Five examples per available tag and split, deterministic after sorting.
@@ -359,6 +421,7 @@ def build_pilot(
         "input_sqlite_sha256": capacity["input_sqlite_sha256"],
         "generator_version": GENERATOR_VERSION,
         "generator_sha256": generator_sha256,
+        "generator_dependency_hash": generator_sha256,
         "pilot_builder_version": PILOT_BUILDER_VERSION,
         "output": str(output_path),
         "requested_rows": requested,
@@ -371,15 +434,30 @@ def build_pilot(
         "refill_performed": refill_performed,
         "collision_rejections": rejected.get("output_pair_collision", 0),
         "rejections": dict(rejected),
+        "not_applicable": not_applicable,
+        "candidate_selected": len(selected),
+        "candidate_rejected": sum(rejected.values()),
+        "rejection_samples": rejection_samples[:REJECTION_SAMPLE_LIMIT],
+        "rejection_telemetry": {
+            "not_applicable": not_applicable,
+            "candidate_selected": len(selected),
+            "candidate_rejected": sum(rejected.values()),
+            "rejections": dict(rejected),
+            "samples": rejection_samples[:REJECTION_SAMPLE_LIMIT],
+            "sample_limit": REJECTION_SAMPLE_LIMIT,
+        },
         "automated_structural_review": "complete",
         "human_linguistic_review": "pending",
         "pilot_review_complete": False,
+        "production_ready": capacity.get("production_ready") is True and not allow_partial_generator_coverage,
+        "development_override": bool(allow_partial_generator_coverage),
         "one_error_per_errorful_pair": all(row["num_errors"] == 1 for row in selected),
         "normalization_noise_injected": False,
         "primary_input_deduplicated": False,
         "generator_version": GENERATOR_VERSION,
         "generator_sha256": generator_sha256,
         "seed": seed,
+        "effective_runtime": runtime_config.get("runtime", {}),
         "config_hash": config_hash,
         "output_sha256": sha256_file(output_path),
     }
@@ -397,14 +475,18 @@ def main() -> None:
     parser.add_argument("--report-json", type=Path, default=Path("reports/pilot_report.json"))
     parser.add_argument("--report-markdown", type=Path, default=Path("reports/pilot_report.md"))
     parser.add_argument("--review-sample", type=Path, default=Path("reports/pilot_review_sample.jsonl"))
-    parser.add_argument("--seed", type=int, default=20260905)
+    parser.add_argument("--seed", type=int)
     parser.add_argument("--config-hash", default="")
     parser.add_argument("--config", type=Path, default=Path("config/filly.yaml"))
+    parser.add_argument(
+        "--allow-partial-generator-coverage", action="store_true",
+        help="development-only pilot; marks output non-production-ready and cannot unlock Phase 9/10",
+    )
     args = parser.parse_args()
     report = build_pilot(
         args.input, args.capacity_report, args.output, args.report_json,
         args.report_markdown, args.review_sample, args.seed, args.config_hash,
-        args.config,
+        args.config, args.allow_partial_generator_coverage,
     )
     print(json.dumps({key: report[key] for key in ("status", "requested_rows", "produced_rows", "shortfall")}, indent=2))
 

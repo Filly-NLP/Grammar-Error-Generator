@@ -14,6 +14,16 @@ from src.evaluation.artifacts import load_prediction_artifact
 from src.evaluation.metrics import evaluate_predictions
 from src.geg.hashing import sha256_file
 from src.geg.artifacts import validate_destinations
+from src.geg.config import load_config, resolve_runtime_config
+
+
+def resolve_evaluation_seed(config_path: Path, override: int | None = None) -> int:
+    """Resolve the report seed from the authoritative project config."""
+
+    if override is not None:
+        return int(override)
+    runtime_config = resolve_runtime_config(load_config(config_path.resolve()))
+    return int(runtime_config["runtime"]["seed"])
 
 
 def main() -> int:
@@ -21,16 +31,18 @@ def main() -> int:
     parser.add_argument("--frozen-evaluation", type=Path, required=True)
     parser.add_argument("--predictions", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--config", type=Path, default=Path("config/filly.yaml"))
     parser.add_argument("--bootstrap-resamples", type=int, default=2000)
-    parser.add_argument("--seed", type=int, default=20260905)
+    parser.add_argument("--seed", type=int, help="Override project.seed for this report")
     parser.add_argument("--include-per-tag", action="store_true")
     parser.add_argument("--normalizer-version")
     parser.add_argument("--gec-version")
     args = parser.parse_args()
     validate_destinations(
-        {"frozen_evaluation": args.frozen_evaluation, "predictions": args.predictions},
+        {"frozen_evaluation": args.frozen_evaluation, "predictions": args.predictions, "config": args.config},
         {"report": args.output},
     )
+    effective_seed = resolve_evaluation_seed(args.config, args.seed)
     frozen = json.loads(args.frozen_evaluation.read_text(encoding="utf-8"))
     if frozen.get("status") != "frozen":
         raise SystemExit("prediction evaluation requires a frozen evaluation manifest")
@@ -41,7 +53,7 @@ def main() -> int:
         predictions,
         include_per_tag=args.include_per_tag,
         bootstrap_resamples=args.bootstrap_resamples,
-        seed=args.seed,
+        seed=effective_seed,
         frozen_evaluation_sha256=sha256_file(args.frozen_evaluation),
         normalizer_version=args.normalizer_version or metadata.get("normalizer_version"),
         gec_version=args.gec_version or metadata.get("gec_version"),

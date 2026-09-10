@@ -11,7 +11,7 @@ from pathlib import Path
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.geg.config import config_hash, load_config
+from src.geg.config import config_hash, load_config, resolve_runtime_config
 from src.geg.hashing import sha256_file
 from src.geg.artifacts import validate_destinations, verify_manifest
 from src.geg.split import SPLIT_NAMES, assign_group_splits, group_key
@@ -46,17 +46,14 @@ def split_parquet(
         {"output": output_path, "report": report_path},
     )
     config = load_config(config_path.resolve())
+    runtime = resolve_runtime_config(config)
     config_digest = config_hash(config)
     quality_provenance = verify_manifest(quality_manifest, input_path, config_digest, "validated_clean")
     if not quality_provenance.get("input_sqlite_sha256"):
         raise RuntimeError("quality manifest lacks input_sqlite_sha256; regenerate Phase 4")
-    split_config = config.get("splits", {})
-    fractions = {
-        "train": float(split_config.get("train", 0.70)),
-        "dev": float(split_config.get("dev", 0.15)),
-        "synthetic_test": float(split_config.get("synthetic_test", 0.15)),
-    }
-    seed = int(config.get("project", {}).get("seed", 20260905) if seed is None else seed)
+    fractions = {name: float(runtime["splits"][name]) for name in SPLIT_NAMES}
+    effective_seed = int(runtime["runtime"]["seed"] if seed is None else seed)
+    group_by_document = bool(runtime["runtime"]["group_by_document"])
 
     parquet = pq.ParquetFile(input_path)
     group_counts: Counter[str] = Counter()
@@ -65,9 +62,9 @@ def split_parquet(
         clean_ids = batch.column("clean_id").to_pylist()
         doc_ids = batch.column("source_doc_id").to_pylist()
         for clean_id, doc_id in zip(clean_ids, doc_ids):
-            group_counts[group_key(str(clean_id), doc_id)] += 1
+            group_counts[group_key(str(clean_id), doc_id, group_by_document=group_by_document)] += 1
             rows_seen += 1
-    assignments = assign_group_splits(group_counts, fractions, seed)
+    assignments = assign_group_splits(group_counts, fractions, effective_seed)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     writer = None
@@ -77,7 +74,7 @@ def split_parquet(
         for batch in parquet.iter_batches():
             clean_ids = batch.column("clean_id").to_pylist()
             doc_ids = batch.column("source_doc_id").to_pylist()
-            keys = [group_key(str(clean_id), doc_id) for clean_id, doc_id in zip(clean_ids, doc_ids)]
+            keys = [group_key(str(clean_id), doc_id, group_by_document=group_by_document) for clean_id, doc_id in zip(clean_ids, doc_ids)]
             split_values = [assignments[key].split for key in keys]
             enriched = batch.append_column("group_key", pa.array(keys, type=pa.string()))
             enriched = enriched.append_column("split", pa.array(split_values, type=pa.string()))
@@ -97,8 +94,9 @@ def split_parquet(
         "output": str(output_path),
         "rows": rows_seen,
         "groups": len(assignments),
-        "grouping": "source_doc_id when present, clean_id fallback",
-        "seed": seed,
+        "grouping": "source_doc_id when present, clean_id fallback" if group_by_document else "clean_id",
+        "group_by_document": group_by_document,
+        "seed": effective_seed,
         "algorithm_version": SPLIT_ALGORITHM_VERSION,
         "config_hash": config_digest,
         "quality_manifest_sha256": sha256_file(quality_manifest),

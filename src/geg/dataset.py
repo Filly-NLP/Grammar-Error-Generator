@@ -9,6 +9,7 @@ from typing import Any, Iterable
 
 from .alignment import validate_replay
 from .tags import validate_tags
+from .states import state_by_id
 
 
 SPLITS = ("train", "dev", "synthetic_test")
@@ -38,15 +39,32 @@ def total_composition(config: dict[str, Any]) -> dict[str, int]:
     if mode != "balarila_total":
         raise ValueError(f"unsupported dataset.counting_mode={mode!r}")
     errorful_fraction = Decimal(str(dataset.get("errorful_fraction", "0.83")))
+    identity_present = "identity_fraction" in dataset
+    identity_fraction = Decimal(str(dataset.get("identity_fraction", 1 - errorful_fraction)))
+    if not (Decimal("0") <= errorful_fraction <= Decimal("1")):
+        raise ValueError("dataset.errorful_fraction must be between 0 and 1")
+    if not (Decimal("0") <= identity_fraction <= Decimal("1")):
+        raise ValueError("dataset.identity_fraction must be between 0 and 1")
+    if identity_present and errorful_fraction + identity_fraction != Decimal("1"):
+        raise ValueError("dataset.errorful_fraction + dataset.identity_fraction must equal 1")
     errorful = int((Decimal(total) * errorful_fraction).to_integral_value(rounding=ROUND_FLOOR))
     return {"total": total, "errorful": errorful, "identity": total - errorful}
 
 
-def split_composition(total: int) -> dict[str, int]:
-    return largest_remainder(total, SPLIT_FRACTIONS)
+def split_composition(total: int, split_fractions: dict[str, Decimal | float | str] | None = None) -> dict[str, int]:
+    fractions = SPLIT_FRACTIONS if split_fractions is None else {
+        key: Decimal(str(value)) for key, value in split_fractions.items()
+    }
+    if tuple(fractions) != SPLITS or sum(fractions.values(), Decimal("0")) != Decimal("1"):
+        raise ValueError("split fractions must contain train/dev/synthetic_test and sum to 1")
+    if any(value <= 0 or value > 1 for value in fractions.values()):
+        raise ValueError("split fractions must be positive and at most 1")
+    return largest_remainder(total, fractions)
 
 
 def stage_composition(errorful_total: int, identity_total: int, errorful_share: Decimal = Decimal("0.80")) -> dict[str, int]:
+    if not (Decimal("0") <= errorful_share <= Decimal("1")):
+        raise ValueError("errorful share must be between 0 and 1")
     stage1 = int((Decimal(errorful_total) * errorful_share).to_integral_value(rounding=ROUND_FLOOR))
     return {
         "dataset1_errorful": stage1,
@@ -92,7 +110,12 @@ def parse_json_field(value: Any, field: str) -> Any:
     return value
 
 
-def validate_candidate_row(row: dict[str, Any], *, known_pair_keys: set[tuple[str, str]] | None = None) -> tuple[str, str] | None:
+def validate_candidate_row(
+    row: dict[str, Any],
+    *,
+    known_pair_keys: set[tuple[str, str]] | None = None,
+    expected_morphology_resource_version: str | None = None,
+) -> tuple[str, str] | None:
     """Validate one Phase 9 candidate; return its exact output-pair key."""
 
     split = str(row.get("split", ""))
@@ -110,6 +133,29 @@ def validate_candidate_row(row: dict[str, Any], *, known_pair_keys: set[tuple[st
     if not isinstance(tags, list) or len(tags) != 1:
         raise ValueError("candidate must contain exactly one correction tag")
     validate_tags([str(tags[0])])
+    morphology_values = [row.get(field) for field in (
+        "morphology_source_state", "morphology_target_state", "morphology_lemma", "morphology_resource_version",
+    )]
+    is_morphology_tag = str(tags[0]).startswith("$TRANSFORM_VERB_")
+    if any(value is not None for value in morphology_values) and is_morphology_tag:
+        if not all(isinstance(value, str) and value.strip() for value in morphology_values):
+            raise ValueError("morphology candidates require all morphology provenance fields")
+        source_state = state_by_id(str(row["morphology_source_state"]))
+        target_state = state_by_id(str(row["morphology_target_state"]))
+        if not target_state.can_be_target:
+            raise ValueError("Table-3-only morphology states cannot be target correction states")
+        if str(tags[0]) != target_state.correction_tag:
+            raise ValueError("morphology target state does not map to correction tag")
+        if source_state.id == target_state.id:
+            raise ValueError("morphology source and target states must differ")
+        if expected_morphology_resource_version is None:
+            raise ValueError("morphology candidate requires a loaded frozen resource")
+        if row["morphology_resource_version"] != expected_morphology_resource_version:
+            raise ValueError("morphology resource version does not match the loaded frozen resource")
+    elif is_morphology_tag:
+        raise ValueError("morphology candidates require explicit morphology provenance fields")
+    elif any(value is not None for value in morphology_values):
+        raise ValueError("non-morphology candidates must have null morphology provenance fields")
     operation = parse_json_field(row.get("generation_operation", {}), "generation_operation")
     if not isinstance(operation, dict):
         raise ValueError("generation_operation must be an object")

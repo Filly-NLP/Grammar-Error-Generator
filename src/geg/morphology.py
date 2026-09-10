@@ -8,6 +8,11 @@ until human review freezes a local morphology resource.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from .resource_freeze import load_frozen_jsonl
+from .resources import project_root
 
 
 @dataclass(frozen=True)
@@ -81,3 +86,13 @@ def map_unimorph_features(features: str) -> StateMapping:
     else:
         return StateMapping(None, aspect, focus, "none", "focus_not_supported")
     return StateMapping(state, aspect, focus, "provisional", "feature_bundle_rule")
+
+
+def load_frozen_morphology() -> tuple[tuple[dict[str, Any], ...], dict[str, Any]]:
+    """Load the approved local resource, or return empty when not supplied."""
+    root = project_root()
+    resource = root / "resources/morphology/tagalog_verb_paradigms_v1.parquet"
+    if not resource.exists():
+        resource = root / "resources/morphology/tagalog_verb_paradigms_v1.jsonl"
+    rows, manifest = load_frozen_jsonl(resource, root / "resources/morphology/morphology_manifest_v1.json")
+    return tuple(rows), manifest

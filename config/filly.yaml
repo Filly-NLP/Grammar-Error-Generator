@@ -35,6 +35,10 @@
     "dataset1_errorful_share": 0.80,
     "dataset2_errorful_share": 0.20
   },
+  "phase9": {
+    "candidate_buffer_ratio": 1.25,
+    "require_aggregate_manifest": true
+  },
   "morphology": {
     "primary_seed": "unimorph_tgl",
     "require_frozen_resource_version": true,

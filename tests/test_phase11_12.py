@@ -20,7 +20,7 @@ RULE_INVENTORY = {
     "status": "frozen",
     "source": "deterministic-test-fixture",
     "license": "CC0-1.0",
-    "rules": [{"id": "rule_seen"}],
+    "rules": [{"id": "rule_seen", "pattern_id": "pattern_seen", "review_status": "approved"}],
 }
 
 
@@ -35,7 +35,15 @@ def fixture_row(index: int, category: str = "slang", source_type: str = "control
         "gold_normalized_errorful": normalized,
         "gold_final_correct": final,
         "normalization_types": [category],
-        "normalization_edits": make_edit(raw, normalized),
+        "normalization_edits": [
+            {
+                **edit,
+                "rule_id": "rule_unseen" if unseen else "rule_seen",
+                "pattern_id": "pattern_unseen" if unseen else "pattern_seen",
+                "seen_status": "unseen_pattern" if unseen else "seen_rule",
+            }
+            for edit in make_edit(raw, normalized)
+        ],
         "grammar_tags": ["$ADD_PUNC_PERIOD"],
         "grammar_edits": [{"start": len(normalized), "end": len(normalized), "source": "", "target": ".", "tag": "$ADD_PUNC_PERIOD"}],
         "source_type": source_type,
@@ -45,6 +53,9 @@ def fixture_row(index: int, category: str = "slang", source_type: str = "control
         "annotator_2": "fixture-b",
         "adjudication_status": "fixture_approved",
         "normalization_rule_id": "rule_unseen" if unseen else "rule_seen",
+        "normalization_rule_ids": ["rule_unseen" if unseen else "rule_seen"],
+        "normalization_pattern_id": "pattern_unseen" if unseen else "pattern_seen",
+        "normalization_pattern_ids": ["pattern_unseen" if unseen else "pattern_seen"],
         "normalization_rule_seen_status": "unseen_pattern" if unseen else "seen_rule",
         "split": "test_only",
         "notes": "deterministic fixture",

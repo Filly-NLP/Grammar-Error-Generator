@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .hashing import sha256_file
+from .hashing import generator_dependency_hash, sha256_file
 
 
 REVIEW_SCHEMA_VERSION = 1
@@ -188,6 +188,27 @@ def validate_review_manifest(
         return _result("incomplete", f"cannot read pilot report: {error}", manifest_path, report, output, sample, current, manifest_hash)
     if pilot_report.get("status") != "complete":
         return _result("incomplete", "pilot report is not complete", manifest_path, report, output, sample, current, manifest_hash)
+    # New production pilots carry the canonical generator/resource dependency
+    # and the exact Phase 6 capacity hash.  Older fixture manifests may omit
+    # these fields only as an explicit compatibility/dev path; they cannot be
+    # marked production-ready by the Phase 9/10 preflights.
+    strict_production = "production_ready" in pilot_report or payload.get("production_ready") is not None
+    if strict_production:
+        if pilot_report.get("production_ready") is not True:
+            return _result("incomplete", "pilot report is not production-ready", manifest_path, report, output, sample, current, manifest_hash)
+        current_generator = generator_dependency_hash()
+        declared_generator = pilot_report.get("generator_dependency_hash")
+        if declared_generator != current_generator:
+            return _result("stale", "generator/resource dependency hash changed", manifest_path, report, output, sample, current, manifest_hash)
+        if payload.get("generator_dependency_hash") != current_generator or target.get("generator_dependency_hash") != current_generator:
+            return _result("stale", "review manifest generator/resource dependency hash mismatch", manifest_path, report, output, sample, current, manifest_hash)
+        capacity_path_value = pilot_report.get("capacity_report")
+        capacity_path = _resolve(capacity_path_value, report.parent) if capacity_path_value else None
+        capacity_hash = sha256_file(capacity_path) if capacity_path and capacity_path.is_file() else None
+        if capacity_hash is None or pilot_report.get("capacity_report_sha256") != capacity_hash:
+            return _result("stale", "capacity report dependency changed or is missing", manifest_path, report, output, sample, current, manifest_hash)
+        if payload.get("capacity_report_sha256") != capacity_hash or target.get("capacity_report_sha256") != capacity_hash:
+            return _result("stale", "review manifest capacity dependency mismatch", manifest_path, report, output, sample, current, manifest_hash)
     if pilot_report.get("human_linguistic_review") == "pending" or not pilot_report.get("pilot_review_complete", False):
         # A pending pilot report may be accompanied by an external review
         # manifest, but the reviewer must explicitly account for all sampled
@@ -311,7 +332,7 @@ def review_manifest_template(
         _, sample_hashes = _review_sample_rows(review_sample.resolve())
     except (OSError, UnicodeError, ValueError):
         sample_hashes = {}
-    return {
+    payload = {
         "schema_version": REVIEW_SCHEMA_VERSION,
         "status": "incomplete",
         "decision": "",
@@ -336,3 +357,13 @@ def review_manifest_template(
         ],
         "notes": "Complete only after every sampled candidate has been linguistically reviewed.",
     }
+    try:
+        report_payload = json.loads(pilot_report.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        report_payload = {}
+    if isinstance(report_payload, dict):
+        for name in ("production_ready", "generator_dependency_hash", "capacity_report_sha256"):
+            if name in report_payload:
+                payload[name] = report_payload[name]
+                payload["target"][name] = report_payload[name]
+    return payload

@@ -18,10 +18,10 @@ class SplitAssignment:
     row_count: int
 
 
-def group_key(clean_id: str, source_doc_id: str | None) -> str:
+def group_key(clean_id: str, source_doc_id: str | None, *, group_by_document: bool = True) -> str:
     """Return the stable grouping key required by the Phase 5 contract."""
 
-    if source_doc_id is not None and str(source_doc_id).strip():
+    if group_by_document and source_doc_id is not None and str(source_doc_id).strip():
         return f"document:{source_doc_id}"
     return f"sentence:{clean_id}"
 

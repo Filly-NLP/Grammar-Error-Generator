@@ -23,7 +23,7 @@ from typing import Any, Iterable
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.geg.config import config_hash as compute_config_hash, load_config
+from src.geg.config import config_hash as compute_config_hash, load_config, resolve_runtime_config
 from src.geg.dataset import (
     SPLITS,
     bounded_quotas,
@@ -34,11 +34,14 @@ from src.geg.dataset import (
     validate_candidate_row,
     validate_identity_row,
 )
-from src.geg.hashing import sha256_file, sha256_files
+from src.geg.hashing import sha256_file, sha256_files, generator_dependency_hash
 from src.geg.generators import GENERATOR_VERSION, all_tag_ids
-from scripts.build_candidates import CANDIDATE_BUILDER_VERSION
+from scripts.build_candidates import CANDIDATE_BUILDER_VERSION, validate_candidate_aggregate
 from src.geg.review import ReviewGateError, require_review_gate
 from src.geg.artifacts import validate_destinations
+from src.geg.schema import gec_arrow_schema
+from src.geg.morphology import load_frozen_morphology
+from src.geg.telemetry import REJECTION_SAMPLE_LIMIT
 
 
 DATASET_BUILDER_VERSION = "filly-phase10-exact-v1"
@@ -71,7 +74,8 @@ def _verify_candidate_manifests(
     candidate_builder_version: str = CANDIDATE_BUILDER_VERSION,
 ) -> dict[str, Any]:
     expected_input_sha256 = sha256_file(split_input)
-    expected_generator_sha256 = sha256_files((Path("src/geg/generators.py").resolve(), Path("src/geg/alignment.py").resolve()))
+    expected_generator_sha256 = generator_dependency_hash()
+    legacy_generator_sha256 = sha256_files((Path(__file__).resolve().parents[1] / "src/geg/generators.py", Path(__file__).resolve().parents[1] / "src/geg/alignment.py"))
     manifests: list[dict[str, Any]] = []
     for path in paths:
         manifest_path = path.with_suffix(".manifest.json")
@@ -96,8 +100,21 @@ def _verify_candidate_manifests(
             raise RuntimeError(f"candidate shard configuration path mismatch: {path}")
         if manifest.get("config_hash") != config_hash:
             raise RuntimeError(f"candidate shard configuration dependency mismatch: {path}")
-        if manifest.get("generator_version") != GENERATOR_VERSION or manifest.get("generator_sha256") != expected_generator_sha256:
+        manifest_generator = manifest.get("generator_dependency_hash", manifest.get("generator_sha256"))
+        legacy_allowed = "production_ready" not in manifest and "generator_dependency_hash" not in manifest
+        if manifest.get("production_ready") is True and manifest_generator != expected_generator_sha256:
+            raise RuntimeError(f"production candidate shard must use the canonical generator dependency hash: {path}")
+        if manifest.get("generator_version") != GENERATOR_VERSION or manifest_generator != expected_generator_sha256 and not (legacy_allowed and manifest_generator == legacy_generator_sha256):
             raise RuntimeError(f"candidate shard generator dependency mismatch: {path}")
+        if "production_ready" in manifest and manifest.get("production_ready") is not True:
+            raise RuntimeError(f"candidate shard is non-production-ready: {path}")
+        if manifest.get("production_ready") is True:
+            import pyarrow.parquet as pq
+            required_morphology = {"morphology_source_state", "morphology_target_state", "morphology_lemma", "morphology_resource_version"}
+            available_columns = set(pq.ParquetFile(path).schema_arrow.names)
+            missing_morphology = sorted(required_morphology - available_columns)
+            if missing_morphology:
+                raise RuntimeError(f"production candidate shard is missing morphology schema columns {missing_morphology}: {path}")
         if manifest.get("seed") != seed or manifest.get("candidate_builder_version") != candidate_builder_version or manifest.get("builder_version") != candidate_builder_version:
             raise RuntimeError(f"candidate shard seed/builder-version dependency mismatch: {path}")
         if review_manifest_sha256 and manifest.get("review_manifest_sha256") != review_manifest_sha256:
@@ -134,6 +151,7 @@ def _verify_candidate_manifests(
         "shard_count": shard_count,
         "manifests": manifests,
         "generator_sha256": expected_generator_sha256,
+        "generator_dependency_hash": expected_generator_sha256,
         "tag_status": tag_statuses[0],
         "quality_manifest_sha256": quality_hashes.pop(),
         "split_report_sha256": split_hashes.pop(),
@@ -172,16 +190,22 @@ def _iter_candidate_rows(paths: list[Path]) -> Iterable[dict[str, Any]]:
         "error_families", "num_errors", "generation_operation", "source_spans", "target_spans",
         "split", "source_corpus", "publisher", "source_doc_id", "sqlite_table", "sqlite_rowid",
         "seed", "generator_version", "candidate_builder_version", "config_hash", "alignment_success", "quality_flags", "confidence",
+        "morphology_source_state", "morphology_target_state", "morphology_lemma", "morphology_resource_version",
     ]
     for path in paths:
         with pq.ParquetFile(path) as parquet:
             available = set(parquet.schema_arrow.names)
-            missing = sorted(set(columns) - available)
+            morphology_columns = {"morphology_source_state", "morphology_target_state", "morphology_lemma", "morphology_resource_version"}
+            missing = sorted((set(columns) - morphology_columns) - available)
             if missing:
                 raise RuntimeError(f"candidate shard missing required columns {missing}: {path}")
-            for batch in parquet.iter_batches(columns=columns):
+            selected_columns = [column for column in columns if column in available]
+            for batch in parquet.iter_batches(columns=selected_columns):
                 for index in range(batch.num_rows):
-                    yield _as_row(batch, columns, index)
+                    row = _as_row(batch, selected_columns, index)
+                    for column in morphology_columns:
+                        row.setdefault(column, None)
+                    yield row
 
 
 def _identity_row(clean: dict[str, Any], seed: int) -> dict[str, Any]:
@@ -215,6 +239,10 @@ def _identity_row(clean: dict[str, Any], seed: int) -> dict[str, Any]:
         "alignment_success": True,
         "quality_flags": json.dumps(["identity_row"], ensure_ascii=False),
         "confidence": "gold_identity",
+        "morphology_source_state": None,
+        "morphology_target_state": None,
+        "morphology_lemma": None,
+        "morphology_resource_version": None,
     }
 
 
@@ -224,7 +252,7 @@ def _write_table(path: Path, rows: list[dict[str, Any]]) -> None:
 
     if not rows:
         raise RuntimeError(f"refusing to write empty dataset view: {path}")
-    pq.write_table(pa.Table.from_pylist(rows), path)
+    pq.write_table(pa.Table.from_pylist(rows, schema=gec_arrow_schema()), path)
 
 
 def build_final_dataset(
@@ -238,8 +266,9 @@ def build_final_dataset(
     review_sample_path: Path = Path("reports/pilot_review_sample.jsonl"),
     blocked_report_path: Path | None = None,
     failure_report_path: Path | None = None,
-    seed: int = 20260905,
+    seed: int | None = None,
     config_path: Path = Path("config/filly.yaml"),
+    candidate_aggregate_path: Path | None = None,
 ) -> dict[str, Any]:
     output_dir = output_dir.resolve()
     for name, report_path in (("blocked_report", blocked_report_path), ("failure_report", failure_report_path)):
@@ -253,8 +282,7 @@ def build_final_dataset(
         destinations["blocked_report"] = blocked_report_path
     if failure_report_path is not None:
         destinations["failure_report"] = failure_report_path
-    validate_destinations(
-        {
+    input_destinations = {
             "candidate_dir": candidate_dir,
             "split_input": split_input,
             "config": config_path,
@@ -262,7 +290,11 @@ def build_final_dataset(
             "pilot_report": pilot_report_path,
             "pilot_output": pilot_output_path,
             "review_sample": review_sample_path,
-        },
+    }
+    if candidate_aggregate_path is not None:
+        input_destinations["candidate_aggregate"] = candidate_aggregate_path
+    validate_destinations(
+        input_destinations,
         destinations,
     )
     # Gate before checking/creating the output directory. A pending review
@@ -286,11 +318,27 @@ def build_final_dataset(
     split_input = split_input.resolve()
     config_path = config_path.resolve()
     config = load_config(config_path)
+    runtime_config = resolve_runtime_config(config) if "project" in config else None
+    if seed is None:
+        seed = int(resolve_runtime_config(config)["runtime"]["seed"]) if "project" in config else 20260905
     current_config_hash = compute_config_hash(config)
     comp = total_composition(config)
-    split_errorful = split_composition(comp["errorful"])
-    split_identity = split_composition(comp["identity"])
+    split_settings = config.get("splits", {})
+    split_fractions = {
+        split: split_settings.get(split, {"train": "0.70", "dev": "0.15", "synthetic_test": "0.15"}[split])
+        for split in SPLITS
+    }
+    split_errorful = split_composition(comp["errorful"], split_fractions)
+    split_identity = split_composition(comp["identity"], split_fractions)
     stage = stage_composition(comp["errorful"], comp["identity"], errorful_share=Decimal(str(config.get("stage_views", {}).get("dataset1_errorful_share", "0.80"))))
+    phase9_settings = config.get("phase9", {}) if isinstance(config.get("phase9", {}), dict) else {}
+    require_aggregate = bool(phase9_settings.get("require_aggregate_manifest", False))
+    if candidate_aggregate_path is None and require_aggregate:
+        candidate_aggregate_path = Path("reports/phase9_candidate_aggregate.json")
+    if candidate_aggregate_path is not None:
+        candidate_aggregate_path = candidate_aggregate_path.resolve()
+    _, morphology_manifest = load_frozen_morphology()
+    expected_morphology_resource_version = str(morphology_manifest.get("resource_version", "")).strip() or None
 
     try:
         # Stream the current split once into a provenance lookup. Candidate
@@ -328,23 +376,50 @@ def build_final_dataset(
             review_manifest_sha256=review.manifest_hash,
             seed=seed,
         )
+        if candidate_aggregate_path is not None:
+            validate_candidate_aggregate(
+                candidate_aggregate_path,
+                candidate_paths,
+                required_by_split=split_errorful,
+                expected_dependencies={
+                    "config_hash": current_config_hash,
+                    "quality_manifest_sha256": shard_info["quality_manifest_sha256"],
+                    "split_report_sha256": shard_info["split_report_sha256"],
+                    "input_sqlite_sha256": shard_info["input_sqlite_sha256"],
+                    "review_manifest_sha256": review.manifest_hash,
+                    "generator_dependency_hash": shard_info["generator_dependency_hash"],
+                    "seed": seed,
+                    "candidate_builder_version": CANDIDATE_BUILDER_VERSION,
+                },
+            )
         # Pass 1 validates every row, records exact capacities, and rejects
         # collisions across shards before any row can be selected.
         capacities: dict[str, Counter[str]] = {split: Counter() for split in SPLITS}
         first_seen_pairs: set[tuple[str, str]] = set()
         candidate_collisions = 0
         candidate_rows_seen = 0
+        rejection_samples: list[dict[str, Any]] = []
+        phase10_rejections: Counter[str] = Counter()
+
+        def reject(reason: str, count: int = 1, **context: Any) -> None:
+            phase10_rejections[str(reason)] += int(count)
+            if len(rejection_samples) < REJECTION_SAMPLE_LIMIT:
+                sample = {key: value for key, value in context.items() if value is not None}
+                sample["reason"] = str(reason)
+                rejection_samples.append(sample)
+
         for row in _iter_candidate_rows(candidate_paths):
             _validate_candidate_dependencies(row, seed=seed, config_hash=current_config_hash)
             candidate_rows_seen += 1
             _validate_candidate_provenance(row, clean_lookup)
             try:
-                key = validate_candidate_row(row)
+                key = validate_candidate_row(row, expected_morphology_resource_version=expected_morphology_resource_version)
             except (TypeError, ValueError) as error:
                 raise RuntimeError(f"invalid candidate row {row.get('pair_id')}: {error}") from error
             assert key is not None
             if key in first_seen_pairs:
                 candidate_collisions += 1
+                reject("output_pair_collision", split=row.get("split"), pair_id=row.get("pair_id"))
                 continue
             first_seen_pairs.add(key)
             capacities[str(row["split"])][str(parse_json_field(row["correction_tags"], "correction_tags")[0])] += 1
@@ -355,7 +430,7 @@ def build_final_dataset(
         for row in _iter_candidate_rows(candidate_paths):
             _validate_candidate_dependencies(row, seed=seed, config_hash=current_config_hash)
             _validate_candidate_provenance(row, clean_lookup)
-            key = validate_candidate_row(row)
+            key = validate_candidate_row(row, expected_morphology_resource_version=expected_morphology_resource_version)
             assert key is not None
             if key in second_seen_pairs:
                 continue
@@ -363,6 +438,7 @@ def build_final_dataset(
             split = str(row["split"])
             tag = str(parse_json_field(row["correction_tags"], "correction_tags")[0])
             if selected_by_tag[(split, tag)] >= quotas[split].get(tag, 0):
+                reject("quota_or_buffer_not_selected", split=split, tag=tag, pair_id=row.get("pair_id"))
                 continue
             selected_by_tag[(split, tag)] += 1
             record = dict(row)
@@ -394,7 +470,7 @@ def build_final_dataset(
         # Build stage views from the exact final split allocation. Dataset 1
         # contains 80% of errorful rows; Dataset 2 contains the remainder plus
         # all identity rows, matching the Balarila two-stage interpretation.
-        stage1_by_split = split_composition(stage["dataset1_errorful"])
+        stage1_by_split = split_composition(stage["dataset1_errorful"], split_fractions)
         stage1_rows_by_split: dict[str, list[dict[str, Any]]] = {split: [] for split in SPLITS}
         stage2_rows_by_split: dict[str, list[dict[str, Any]]] = {split: [] for split in SPLITS}
         for split in SPLITS:
@@ -444,6 +520,18 @@ def build_final_dataset(
                 "candidate_rows_seen": candidate_rows_seen,
                 "candidate_pair_collisions_rejected": candidate_collisions,
                 "candidate_unique_pairs": len(first_seen_pairs),
+                "not_applicable": 0,
+                "candidate_selected": sum(len(selected[split]) for split in SPLITS),
+                "candidate_rejected": sum(phase10_rejections.values()),
+                "rejection_samples": rejection_samples[:REJECTION_SAMPLE_LIMIT],
+                "rejection_telemetry": {
+                    "not_applicable": 0,
+                    "candidate_selected": sum(len(selected[split]) for split in SPLITS),
+                    "candidate_rejected": sum(phase10_rejections.values()),
+                    "rejections": dict(phase10_rejections),
+                    "samples": rejection_samples[:REJECTION_SAMPLE_LIMIT],
+                    "sample_limit": REJECTION_SAMPLE_LIMIT,
+                },
                 "tag_counts": tag_counts,
                 "tag_status": shard_info["tag_status"],
                 "identity_rows_are_clean": True,
@@ -455,6 +543,8 @@ def build_final_dataset(
                 "candidate_dir": str(candidate_dir),
                 "candidate_shard_hashes": {str(path): sha256_file(path) for path in candidate_paths},
                 "candidate_shard_count": shard_info["shard_count"],
+                "candidate_aggregate_manifest": str(candidate_aggregate_path) if candidate_aggregate_path else None,
+                "candidate_aggregate_manifest_sha256": sha256_file(candidate_aggregate_path) if candidate_aggregate_path else None,
                 "candidate_generator_sha256": shard_info["generator_sha256"],
                 "quality_manifest_sha256": shard_info["quality_manifest_sha256"],
                 "split_report_sha256": shard_info["split_report_sha256"],
@@ -469,6 +559,7 @@ def build_final_dataset(
                 "candidate_builder_version": CANDIDATE_BUILDER_VERSION,
                 "generator_version": GENERATOR_VERSION,
                 "seed": seed,
+                "effective_runtime": runtime_config.get("runtime") if runtime_config else {"seed": seed, "split_fractions": split_fractions},
                 "outputs": outputs,
             }
             (tmp / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -496,7 +587,8 @@ def main() -> None:
     parser.add_argument("--blocked-report", type=Path, default=Path("reports/phase10_blocked_attempt.json"))
     parser.add_argument("--failure-report", type=Path, default=Path("reports/phase10_failure.json"))
     parser.add_argument("--config", type=Path, default=Path("config/filly.yaml"))
-    parser.add_argument("--seed", type=int, default=20260905)
+    parser.add_argument("--candidate-aggregate", type=Path)
+    parser.add_argument("--seed", type=int)
     args = parser.parse_args()
     try:
         report = build_final_dataset(
@@ -509,6 +601,7 @@ def main() -> None:
             failure_report_path=args.failure_report,
             seed=args.seed,
             config_path=args.config,
+            candidate_aggregate_path=args.candidate_aggregate,
         )
     except ReviewGateError as error:
         print(json.dumps({"status": "blocked", "gate": error.result.status, "reason": error.result.reason}, ensure_ascii=True))

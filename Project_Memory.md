@@ -870,3 +870,251 @@ material failure.
   all JSON schemas parsed, and `git diff --check` passed. The source database
   remains unchanged at SHA-256
   `aadfbbaf0f9ee428e394395a4c73a13dcb0a798b75ca2356eece0f1df0fc7f50`.
+
+## 2026-09-10 - Remediation core: configuration, resources, schemas, and coverage
+
+- Added validated runtime configuration with Decimal ratio checks, authoritative
+  `project.seed`, configurable split fractions, stage-share validation, and the
+  `group_by_document` runtime switch. Phase 5 now consumes these resolved values;
+  omitted legacy fixture identity fractions remain derived for compatibility,
+  while explicitly inconsistent fractions fail closed.
+- Added CWD-independent `generator_dependency_manifest()` and
+  `generator_dependency_hash()` binding generator/alignment code, Table 2/3
+  registries, and optional frozen morphology/construction resources. Phase 6,
+  Phase 8, Phase 9, and Phase 10 now record or validate the dependency hash;
+  old artifacts without the new key remain accepted only through the explicit
+  legacy compatibility path and are stale after regeneration.
+- Added stable nullable morphology provenance fields to Candidate, Phase 8,
+  Phase 9, Phase 10, and identity-row records:
+  `morphology_source_state`, `morphology_target_state`,
+  `morphology_lemma`, and `morphology_resource_version`.
+- Added fail-closed reviewed-resource freezing/loading for morphology and
+  hyphen/spacing constructions. Freeze requires explicit approved rows,
+  reviewer/date, provenance/license metadata, minimum sibling-state coverage,
+  and atomically publishes immutable JSONL plus hash-bound manifests. No
+  reviewed linguistic rows were fabricated or frozen in this remediation.
+- Added resource-backed exact morphology sibling generation and exact reviewed
+  construction generation. IMPACT/IMPOBJ remain valid source states but cannot
+  become target correction states. Absent resources remain unavailable.
+- Added explicit 39-tag implementation coverage reporting separate from
+  observed capacity/resource readiness; Phase 6 reports implementation,
+  resource, capacity, and production-readiness status without silently dropping
+  rare or unavailable tags. Phase 9 rejects explicitly non-production-ready
+  capacity reports.
+- Added structured not-applicable/rejection counters, conservative reviewed
+  function-word contexts, provisional confidence for missing/duplicate-word
+  and punctuation-substitution candidates, and a documented provisional policy
+  status pending human linguistic review.
+- Added `tests/test_remediation_core.py`. Validation: `.venv\\Scripts\\python.exe
+  -m pytest -q` -> **125 passed**; compileall passed; `git diff --check` passed.
+  No new pilot, Phase 9 candidates, or Phase 10 final dataset was generated;
+  existing live artifacts are stale because generator/dependency semantics
+  changed. Human-reviewed morphology/construction resources and Phase 8
+  linguistic approval remain required before production generation.
+- Extended the reviewed-resource freeze/load path to support immutable JSONL or
+  Parquet outputs, and made Phase 5/9/10 use configured split fractions and the
+  config seed when no explicit CLI override is supplied. Effective runtime
+  values are now recorded in phase manifests. Re-ran full pytest: **125 passed**.
+
+## 2026-09-10 - Evaluation baseline/schema and controlled-noise remediation
+
+- Phase 12 category breakdowns now have an explicit common `raw_to_final`
+  baseline for the primary A/B end-to-end comparison. Separate
+  `gec_input_breakdown_*` diagnostics retain the GEC-input view without
+  mislabeling it as end-to-end; paired A/B bootstrap remains raw-baseline.
+- Phase 11 evaluation rows now canonicalize `grammar_families` and
+  `real_or_controlled`, validate tag/family correspondence, reject conflicting
+  deprecated `error_families` aliases, and emit canonical fields at the JSONL
+  boundary. Generic GEC leakage files remain schema-agnostic for ID/text
+  extraction.
+- Added `src/evaluation_noise/injector.py` plus
+  `scripts/freeze_noise_resource.py` and
+  `scripts/build_controlled_evaluation.py`. The injector is resource-driven,
+  deterministic, separate from `src/geg`, protects grammar spans, records
+  replayable `R -> N*` edits, checks seen/unseen rule IDs against the frozen
+  normalizer inventory, and supports slang/abbreviation/spelling-variation/
+  mixed-noise categories. Generated rows are explicitly
+  `pending_annotation`; no authentic examples, reviewed rules, annotations,
+  or frozen evaluation data were fabricated.
+- Added `tests/test_remediation_eval.py`; targeted evaluation tests passed
+  **35**, then full pytest passed **133**. Existing Phase 11/12 artifacts are
+  stale relative to the changed schema/metric contracts and require fresh
+  reviewed inputs before freeze.
+
+## 2026-09-10 - Controlled-noise provenance hardening
+
+- Controlled-noise injection now requires a genuinely frozen normalizer-rule
+  inventory with version/source/license metadata and approved entries; plain
+  ID sets, draft JSON, missing metadata, and unapproved entries are rejected.
+- Every normalization edit carries and is checked for `rule_id`,
+  `pattern_id`, and `seen_status`; row-level rule/pattern lists and aggregate
+  `normalization_rule_seen_status` must match the per-edit evidence. Mixed
+  rows cannot silently coerce mixed seen/unseen edits and require two
+  non-overlapping edits with one consistent status.
+- Added adversarial inventory/status/overlap tests. Evaluation slice remains
+  resource/review gated; no normalizer inventory, authentic text, or frozen
+  controlled evaluation rows were fabricated.
+- Tightened the mixed-noise contract: two distinct noise categories are
+  required, every edit's rule/pattern/status must agree with the frozen
+  inventory, and mixed seen/unseen evidence is rejected rather than coerced.
+
+## 2026-09-10 - Phase 9 selection, diagnostics, and rejection telemetry remediation
+
+- Phase 9 bounded shard selection now scans the complete assigned shard and
+  retains stable SHA-256-ranked candidates in capacity-aware split/tag
+  reservoirs. Rare groups receive a deterministic slot before common groups;
+  reversing input row order cannot change the selected set. Configured
+  `phase9.candidate_buffer_ratio` (default `1.25` in the root config) is
+  recorded as the requested over-generation buffer.
+- Added `aggregate_candidate_manifests()` and
+  `scripts/aggregate_candidates.py` for per-split/tag requested/produced
+  counts, shortfalls, Phase 10 capacity adequacy, and bounded rejection
+  telemetry. Existing Phase 10 exact-capacity checks remain fail-closed.
+- Added `src/geg/reporting.py` and `scripts/report_synthetic_test.py`; the
+  synthetic-test report includes all 39 tags, all 10 families, identity vs
+  errorful rows, length buckets, publisher counts, morphology transitions,
+  and final-manifest hash validation.
+- Phase 6, Phase 8, Phase 9, and Phase 10 now expose separate
+  `not_applicable`, `candidate_rejected`, `candidate_selected`, reason
+  counters, and bounded diagnostic samples. No production candidate or final
+  dataset was generated; human pilot approval and reviewed linguistic
+  resources remain required.
+- Added `tests/test_phase9_reporting.py`; focused Phase 9/reporting tests
+  passed **4** and the prior Phase 5-10 regression groups passed **56**.
+
+## 2026-09-10 - Phase 9/10 aggregate and diagnostics publication hardening
+
+- Synthetic-test diagnostics now validate destination aliases and existing
+  outputs before publication, reject symlink leaves, use exclusive lock files,
+  publish JSON and Markdown through unique temporary siblings, and clean up
+  partial publications on failure.
+- Phase 9 aggregate manifests now validate complete unique shard index sets,
+  shard output hashes, common capacity/config/quality/split/SQLite/review and
+  generator dependencies, `production_ready=true`, and complete 39-tag status
+  maps. The aggregate binds a canonical `aggregate_sha256` payload hash and
+  sibling-manifest hashes.
+- Phase 10 can require and validate the hash-bound aggregate through
+  `phase9.require_aggregate_manifest=true` (enabled in the root config),
+  including exact per-split errorful capacity before final output creation.
+  Development fixtures with custom configs retain their explicit legacy path;
+  no production aggregate or final dataset was generated.
+- Added adversarial diagnostics/aggregate tests. Full suite after this
+  hardening: **141 passed**; compileall passed.
+
+## 2026-09-10 - Final Phase 9/report publication race and capacity binding fixes
+
+- `build_candidate_shard` now binds the supplied capacity report to the Phase
+  8 pilot report path and SHA-256 and checks any production review-manifest
+  capacity path/hash binding before generation. An alternate or tampered
+  production-ready capacity report cannot pass by preserving only the config
+  and generator hashes.
+- Synthetic diagnostics and Phase 9 aggregate publication now use exclusive
+  create-new hard-link semantics instead of overwrite-capable replacement.
+  If a concurrent external writer wins the second diagnostics destination,
+  the first publication is rolled back only when it still refers to the
+  builder's temporary file; external winners are preserved. Locks and temp
+  directories are always cleaned up.
+- Aggregate validation now requires complete unique shard sets, output and
+  sibling-manifest hashes, common canonical dependency hashes,
+  `production_ready=true`, and a canonical `aggregate_sha256`. Phase 10
+  validates this hash-bound aggregate and exact per-split capacity before
+  candidate-row selection.
+- Added adversarial alternate-capacity and concurrent-publication tests;
+  no production output was generated. Existing Phase 6/8/9/10 artifacts are
+  stale after these provenance/publication changes.
+
+## 2026-09-10 - Final remediation integration status
+
+- Added root-level `REMEDIATION_REPORT.md` and `PRODUCTION_READINESS.md`.
+  They are the authoritative final status: code is complete for reviewed
+  resource ingestion/freezing, provenance, schemas, candidate selection,
+  controlled evaluation noise, and diagnostics, but production remains blocked
+  pending genuine reviewed morphology/hyphen/spacing resources, a fresh
+  39-tag Phase 6 census, a fresh Phase 8 pilot, and hash-bound human Filipino
+  linguistic approval.
+- Updated the project documentation with the same fail-closed status. No
+  historical memory entries were rewritten.
+- Changed `scripts/evaluate_predictions.py` so its default bootstrap seed is
+  resolved from `config/filly.yaml` `project.seed`; an explicit `--seed` remains
+  an auditable override. All production construction CLIs use the resolved
+  runtime seed/fractions rather than an independent hard-coded default.
+- Final integration validation: full pytest **139 passed**, compileall passed,
+  JSON schemas parsed, CLI help checks passed, and `git diff --check` passed.
+  The original SQLite SHA-256 remains
+  `aadfbbaf0f9ee428e394395a4c73a13dcb0a798b75ca2356eece0f1df0fc7f50`.
+
+## 2026-09-10 - Reviewer hardening refresh
+
+- Added hash-bound reviewed punctuation-context resource freezing and loading;
+  punctuation-change tags now fail closed until genuine approved contexts are
+  supplied. The generator dependency manifest includes punctuation resources.
+- Strengthened controlled-noise provenance: a genuinely frozen normalizer-rule
+  inventory with source/license/version metadata and approved entries is now
+  mandatory, with per-edit rule/pattern/status evidence and strict mixed-noise
+  consistency checks.
+- Strengthened Phase 9 aggregate publication and Phase 10 consumption with
+  complete shard-set, hash, dependency, production-readiness, and exact
+  per-split-capacity validation. The root config now requires the aggregate
+  manifest in production mode.
+- Existing Phase 6, Phase 8, Phase 9, and Phase 10 artifacts remain stale under
+  the expanded resource/dependency contracts; no production aggregate,
+  candidate corpus, final 1M dataset, or frozen evaluation set exists.
+- Refreshed final reports after reviewer changes. Current full-suite evidence is
+  **144 passed**; production remains blocked on genuine reviewed resources,
+  fresh census/pilot approval, and reviewed evaluation inputs.
+
+## 2026-09-10 - Final test-count refresh
+
+- Refreshed `PRODUCTION_READINESS.md` after the latest reviewer tests. The
+  current full-suite result is **151 passed**; production blockers and all
+  fail-closed gates remain unchanged.
+
+## 2026-09-10 - Generator resource publication and lookup hardening
+
+- Punctuation substitution resources now require an explicit reviewed lexical
+  `context`, a one-character correct terminal mark, a one-character wrong
+  terminal mark, and a correction-tag-consistent target mark. The generator
+  matches the complete reviewed target pattern, so adversarial sentences such
+  as `Malungkot?` cannot inherit a rule reviewed for `Masaya.`; only the final
+  punctuation character can change.
+- Morphology generation tokenizes each sentence and uses the immutable
+  `morphology_by_surface` index before filtering the target state and same-
+  lemma sibling states. It no longer scans all target-state rows for every
+  sentence. IMPACT/IMPOBJ remain source-only through the Table 3 mapping.
+- Frozen resource pairs now publish with exclusive hard-link creation rather
+  than overwrite-capable replacement. If the manifest publication loses a
+  race after the resource is created, the first file is rolled back; existing
+  destinations are never replaced.
+- Added regression tests for punctuation-context validation and adversarial
+  matching, O(1)-indexed morphology lookup, and pair-publication rollback.
+  Full suite after this slice: **148 passed**. No linguistic resource, pilot,
+  candidate shard, or final dataset was fabricated; production remains blocked
+  pending genuine reviewed resources and the hash-bound human review gate.
+
+## 2026-09-10 - Phase 9 capacity-binding and publication race hardening
+
+- `build_candidate_shard` now requires the supplied capacity report SHA-256 to
+  match the Phase 8 pilot report and the approved review manifest. Alternate or
+  tampered production-ready reports cannot be substituted while retaining only
+  matching config/generator metadata.
+- Aggregate candidate manifests and paired synthetic-test diagnostics publish
+  with exclusive create-new hard links. A concurrent external winner is never
+  overwritten; if the second diagnostics output loses a race, only the
+  builder's first publication is rolled back. Locks and temporary directories
+  are cleaned on both success and failure.
+- Added adversarial alternate-capacity and external-winner tests. Full suite:
+  **151 passed**. No production candidate, aggregate, diagnostics, or final
+  dataset was generated; existing Phase 6/8/9/10 artifacts remain stale under
+  the strengthened dependency contract.
+
+## 2026-09-10 - Readiness documentation synchronized
+
+- Synchronized the readiness, README, and remediation-core test-count displays
+  to the current **151 passed** suite. Production blockers remain unchanged.
+
+## 2026-09-10 - README encoding hygiene
+
+- Converted `README.md` losslessly from UTF-16LE/BOM to UTF-8 text and added a
+  `README.md text diff` attribute so Git treats the documentation as text and
+  GitHub can render it normally. The current validation count remains
+  **151 passed**.
