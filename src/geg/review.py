@@ -19,7 +19,7 @@ from typing import Any
 from .hashing import generator_dependency_hash, sha256_file
 
 
-REVIEW_SCHEMA_VERSION = 1
+REVIEW_SCHEMA_VERSION = 2
 VALID_STATUSES = frozenset({"complete", "incomplete", "stale", "revise", "reject"})
 APPROVING_DECISIONS = frozenset({"approve", "approved", "accept", "accepted"})
 ROW_DECISIONS = APPROVING_DECISIONS | frozenset({"revise", "revision_required", "reject", "rejected"})
@@ -136,6 +136,10 @@ def validate_review_manifest(
     pilot_output_path: Path | None = None,
     review_sample_path: Path | None = None,
     root: Path | None = None,
+    expected_generator_dependency_hash: str | None = None,
+    expected_config_hash: str | None = None,
+    expected_capacity_report_sha256: str | None = None,
+    production: bool = False,
 ) -> ReviewGateResult:
     """Validate the review manifest against the exact current pilot files.
 
@@ -179,7 +183,7 @@ def validate_review_manifest(
     for name, value in current.items():
         if value is None:
             return _result("incomplete", f"review dependency missing: {name}", manifest_path, report, output, sample, current, manifest_hash)
-        if payload.get(name) != value and target.get(name) != value:
+        if payload.get(name) != value or target.get(name) != value:
             return _result("stale", f"hash mismatch for {name}", manifest_path, report, output, sample, current, manifest_hash)
 
     try:
@@ -192,11 +196,14 @@ def validate_review_manifest(
     # and the exact Phase 6 capacity hash.  Older fixture manifests may omit
     # these fields only as an explicit compatibility/dev path; they cannot be
     # marked production-ready by the Phase 9/10 preflights.
-    strict_production = "production_ready" in pilot_report or payload.get("production_ready") is not None
+    # Production callers opt in explicitly.  Do not infer trust from a
+    # user-controlled ``production_ready`` field: a legacy/schema-v2
+    # approval with missing identities must never unlock Phase 9/10.
+    strict_production = production or "production_ready" in pilot_report or payload.get("production_ready") is not None
     if strict_production:
         if pilot_report.get("production_ready") is not True:
             return _result("incomplete", "pilot report is not production-ready", manifest_path, report, output, sample, current, manifest_hash)
-        current_generator = generator_dependency_hash()
+        current_generator = expected_generator_dependency_hash or generator_dependency_hash()
         declared_generator = pilot_report.get("generator_dependency_hash")
         if declared_generator != current_generator:
             return _result("stale", "generator/resource dependency hash changed", manifest_path, report, output, sample, current, manifest_hash)
@@ -207,8 +214,16 @@ def validate_review_manifest(
         capacity_hash = sha256_file(capacity_path) if capacity_path and capacity_path.is_file() else None
         if capacity_hash is None or pilot_report.get("capacity_report_sha256") != capacity_hash:
             return _result("stale", "capacity report dependency changed or is missing", manifest_path, report, output, sample, current, manifest_hash)
+        expected_capacity = expected_capacity_report_sha256 or capacity_hash
+        if expected_capacity != capacity_hash:
+            return _result("stale", "current capacity report does not match expected identity", manifest_path, report, output, sample, current, manifest_hash)
         if payload.get("capacity_report_sha256") != capacity_hash or target.get("capacity_report_sha256") != capacity_hash:
             return _result("stale", "review manifest capacity dependency mismatch", manifest_path, report, output, sample, current, manifest_hash)
+        expected_config = expected_config_hash or str(pilot_report.get("config_hash", ""))
+        if not expected_config or payload.get("config_hash") != expected_config or target.get("config_hash") != expected_config:
+            return _result("stale", "review manifest config dependency mismatch", manifest_path, report, output, sample, current, manifest_hash)
+        if pilot_report.get("config_hash") != expected_config:
+            return _result("stale", "pilot report config dependency mismatch", manifest_path, report, output, sample, current, manifest_hash)
     if pilot_report.get("human_linguistic_review") == "pending" or not pilot_report.get("pilot_review_complete", False):
         # A pending pilot report may be accompanied by an external review
         # manifest, but the reviewer must explicitly account for all sampled
@@ -303,6 +318,10 @@ def require_review_gate(
     root: Path | None = None,
     blocked_report: Path | None = None,
     attempted_output: Path | None = None,
+    expected_generator_dependency_hash: str | None = None,
+    expected_config_hash: str | None = None,
+    expected_capacity_report_sha256: str | None = None,
+    production: bool = False,
 ) -> ReviewGateResult:
     result = validate_review_manifest(
         manifest_path,
@@ -310,6 +329,10 @@ def require_review_gate(
         pilot_output_path=pilot_output_path,
         review_sample_path=review_sample_path,
         root=root,
+        expected_generator_dependency_hash=expected_generator_dependency_hash,
+        expected_config_hash=expected_config_hash,
+        expected_capacity_report_sha256=expected_capacity_report_sha256,
+        production=production,
     )
     if blocked_report is not None:
         write_gate_report(blocked_report, result, attempted_output=attempted_output)
@@ -324,6 +347,9 @@ def review_manifest_template(
     review_sample: Path,
     *,
     expected_review_rows: int,
+    expected_generator_dependency_hash: str | None = None,
+    expected_config_hash: str | None = None,
+    expected_capacity_report_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Return a reviewer-facing manifest template with current hashes."""
 
@@ -356,14 +382,24 @@ def review_manifest_template(
             for pair_id, row_hash in sample_hashes.items()
         ],
         "notes": "Complete only after every sampled candidate has been linguistically reviewed.",
+        # Schema v2 records the identities that a production approval is
+        # expected to bind. Development fixtures may leave config/capacity
+        # blank when their pilot report is not production-ready; such a
+        # manifest can never unlock Phase 9/10.
+        "generator_dependency_hash": expected_generator_dependency_hash or generator_dependency_hash(),
+        "config_hash": expected_config_hash,
+        "capacity_report_sha256": expected_capacity_report_sha256,
     }
     try:
         report_payload = json.loads(pilot_report.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError):
         report_payload = {}
     if isinstance(report_payload, dict):
-        for name in ("production_ready", "generator_dependency_hash", "capacity_report_sha256"):
+        for name in ("production_ready", "generator_dependency_hash", "capacity_report_sha256", "config_hash"):
             if name in report_payload:
                 payload[name] = report_payload[name]
                 payload["target"][name] = report_payload[name]
+    payload["target"]["generator_dependency_hash"] = payload.get("generator_dependency_hash")
+    payload["target"]["config_hash"] = payload.get("config_hash")
+    payload["target"]["capacity_report_sha256"] = payload.get("capacity_report_sha256")
     return payload

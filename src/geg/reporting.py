@@ -175,6 +175,11 @@ def build_synthetic_test_diagnostics(
         "generator_dependency_hash": (manifest.get("candidate_generator_sha256") or manifest.get("generator_dependency_hash")) if manifest else None,
         "dataset_builder_version": manifest.get("builder_version") if manifest else None,
     }
+    if manifest is not None and total != int(manifest["split_counts"]["synthetic_test"]):
+        raise RuntimeError(
+            "synthetic-test row count does not match final dataset manifest: "
+            f"{total} != {manifest['split_counts']['synthetic_test']}"
+        )
     if output_json.exists() or output_markdown.exists():
         raise FileExistsError("refusing to overwrite existing synthetic diagnostics")
     lines = [

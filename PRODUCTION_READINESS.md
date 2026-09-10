@@ -14,7 +14,7 @@ reviewed linguistic-resource readiness.
 | `IMPACT`/`IMPOBJ` source-only constraint | PASS | Morphology freeze/generation validation |
 | Primary SQLite read-only / no second dedupe | PASS | Phase 4 code and unchanged source hash |
 | Config seed/fractions/grouping authoritative | PASS | `resolve_runtime_config()` and regression tests |
-| CWD-independent dependency hash | PASS | Canonical repository-root manifest and regression test |
+| CWD-independent dependency hash | PASS | Canonical repository-root manifest and regression test; active configured payload/manifest paths are hash-bound |
 | Stable morphology columns end-to-end | PASS | Arrow schema and row validation |
 | Reviewed morphology resource frozen | BLOCKED | No genuine reviewed paradigms, reviewer, date, or license metadata supplied |
 | Reviewed hyphen/spacing construction resource frozen | BLOCKED | No genuine approved construction rows supplied |
@@ -30,7 +30,37 @@ reviewed linguistic-resource readiness.
 | Authentic informal evaluation set frozen | BLOCKED | Must be sourced and manually annotated; must not be fabricated |
 | Normalizer training rule inventory frozen | BLOCKED | Required for seen/unseen-pattern evaluation |
 | A/B/C prediction evaluation runnable | CODE READY | Requires frozen evaluation rows and real model predictions |
-| Full automated test suite | PASS | `151 passed` |
+| Full automated test suite | PASS | `160 passed` |
+
+## Latest hardening slice
+
+- Production Phase 9/10 now validate the current full config and capacity
+  identity before invoking the explicit production review gate. Schema-v2
+  approvals with missing or stale identities cannot create candidate/final
+  outputs.
+- Morphology operations now record the generated erroneous span length, so
+  same-lemma replacements with different lengths and token punctuation replay
+  exactly.
+- Frozen resource payloads and manifests are selected by validated config and
+  may use a newly versioned freeze without changing generator code. The
+  morphology, construction, punctuation, and human-review blockers remain
+  genuine and no resource rows or pilot approvals were fabricated.
+- Minimal or malformed configs are rejected by Phase 9/10 unless the caller
+  explicitly supplies `allow_development=True` or `--allow-development`; dev
+  outputs are never labeled production-ready.
+
+## Second-pass dependency refresh
+
+- Phase 8 targets are controlled by `phase8.pilot_total` and resolved split
+  fractions; reports record the effective targets.
+- The review manifest is schema v2. It must bind pilot hashes at root and
+  target plus the current generator dependency, config, and capacity hashes.
+  Schema-v1 and missing production identities cannot unlock Phase 9/10.
+- The Phase 10 manifest records `generator_dependency_hash` explicitly.
+- Existing Phase 6/8/9/10 artifacts are stale after these identity and schema
+  changes. No production regeneration was performed.
+- The thesis manuscript still needs wording synchronization with the refined
+  grammar-only GEC versus separate informal-evaluation architecture.
 
 ## Unlock sequence
 

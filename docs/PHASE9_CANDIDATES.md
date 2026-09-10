@@ -16,6 +16,15 @@ means reversing Parquet row order cannot change the selected set, while rare
 tags receive capacity-aware slots before common tags consume the bound. Exact
 output-pair collisions are checked after ranking and counted separately.
 
+Production shards require a current `production_ready=true` Phase 6/8 chain
+and schema-v2 review identity. Development-only legacy fixtures are not
+eligible to unlock Phase 9. Existing shards from before the second-pass
+dependency/review changes are stale.
+
+Both minimal/malformed and non-production configurations are rejected by
+default. Fixture callers must pass `--allow-development` (or the API
+`allow_development=True`); such shards are explicitly non-production.
+
 When `phase9.candidate_buffer_ratio` (or the legacy
 `dataset.candidate_buffer_ratio`) is configured, the requested bound is
 multiplied by that ratio and recorded as `buffer_rows`; the default root

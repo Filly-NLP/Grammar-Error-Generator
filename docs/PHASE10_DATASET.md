@@ -44,6 +44,15 @@ final publication. Blocked/failure reports are also rejected when they are
 descendants of the final output directory, preventing a failed run from
 wedging its own output tree.
 
+The final manifest records the canonical `generator_dependency_hash`,
+`production_ready=true`, and the stable pair schema version. Phase 10 rejects
+legacy or missing production flags when a real project configuration is in
+use. Historical Phase 10 artifacts are stale after the second-pass
+review/resource/configuration identity changes and are not regenerated here.
+Minimal or malformed configs are rejected unless `--allow-development` (or
+the API `allow_development=True`) is explicit; development outputs are marked
+`production_ready=false` and cannot be used as production artifacts.
+
 The synthetic-test split is part of this 1M GEC corpus. It is not the separate
 end-to-end informal evaluation dataset described in the implementation plan;
 phases 11–12 remain separate work.

@@ -34,7 +34,7 @@ from src.geg.dataset import (
     validate_candidate_row,
     validate_identity_row,
 )
-from src.geg.hashing import sha256_file, sha256_files, generator_dependency_hash
+from src.geg.hashing import sha256_file, generator_dependency_hash, legacy_generator_hash
 from src.geg.generators import GENERATOR_VERSION, all_tag_ids
 from scripts.build_candidates import CANDIDATE_BUILDER_VERSION, validate_candidate_aggregate
 from src.geg.review import ReviewGateError, require_review_gate
@@ -72,10 +72,11 @@ def _verify_candidate_manifests(
     review_manifest_sha256: str | None,
     seed: int,
     candidate_builder_version: str = CANDIDATE_BUILDER_VERSION,
+    expected_generator_sha256: str | None = None,
+    production: bool = False,
 ) -> dict[str, Any]:
     expected_input_sha256 = sha256_file(split_input)
-    expected_generator_sha256 = generator_dependency_hash()
-    legacy_generator_sha256 = sha256_files((Path(__file__).resolve().parents[1] / "src/geg/generators.py", Path(__file__).resolve().parents[1] / "src/geg/alignment.py"))
+    expected_generator_sha256 = expected_generator_sha256 or generator_dependency_hash()
     manifests: list[dict[str, Any]] = []
     for path in paths:
         manifest_path = path.with_suffix(".manifest.json")
@@ -100,14 +101,25 @@ def _verify_candidate_manifests(
             raise RuntimeError(f"candidate shard configuration path mismatch: {path}")
         if manifest.get("config_hash") != config_hash:
             raise RuntimeError(f"candidate shard configuration dependency mismatch: {path}")
+        # Production manifests must explicitly opt in to the current schema;
+        # missing/legacy fields are retained only for isolated development
+        # fixtures that do not carry a real project config.
+        if production and config_path.exists() and "project" in load_config(config_path):
+            if manifest.get("production_ready") is not True:
+                raise RuntimeError(f"candidate shard is missing production_ready=true: {path}")
         manifest_generator = manifest.get("generator_dependency_hash", manifest.get("generator_sha256"))
-        legacy_allowed = "production_ready" not in manifest and "generator_dependency_hash" not in manifest
         if manifest.get("production_ready") is True and manifest_generator != expected_generator_sha256:
             raise RuntimeError(f"production candidate shard must use the canonical generator dependency hash: {path}")
-        if manifest.get("generator_version") != GENERATOR_VERSION or manifest_generator != expected_generator_sha256 and not (legacy_allowed and manifest_generator == legacy_generator_sha256):
+        development_fixture = (not config_path.exists() or "project" not in load_config(config_path)) and "production_ready" not in manifest and "generator_dependency_hash" not in manifest
+        if manifest.get("generator_version") != GENERATOR_VERSION or (
+            manifest_generator != expected_generator_sha256
+            and not (development_fixture and manifest_generator == legacy_generator_hash())
+        ):
             raise RuntimeError(f"candidate shard generator dependency mismatch: {path}")
-        if "production_ready" in manifest and manifest.get("production_ready") is not True:
+        if production and "production_ready" in manifest and manifest.get("production_ready") is not True:
             raise RuntimeError(f"candidate shard is non-production-ready: {path}")
+        if not production and manifest.get("production_ready") is True:
+            raise RuntimeError(f"development Phase 10 cannot consume a production-labeled candidate shard: {path}")
         if manifest.get("production_ready") is True:
             import pyarrow.parquet as pq
             required_morphology = {"morphology_source_state", "morphology_target_state", "morphology_lemma", "morphology_resource_version"}
@@ -269,6 +281,7 @@ def build_final_dataset(
     seed: int | None = None,
     config_path: Path = Path("config/filly.yaml"),
     candidate_aggregate_path: Path | None = None,
+    allow_development: bool = False,
 ) -> dict[str, Any]:
     output_dir = output_dir.resolve()
     for name, report_path in (("blocked_report", blocked_report_path), ("failure_report", failure_report_path)):
@@ -297,6 +310,62 @@ def build_final_dataset(
         input_destinations,
         destinations,
     )
+    # Load and validate the current config/capacity before consulting review.
+    # This prevents a crafted legacy approval from bypassing the production
+    # identity checks and ensures no final output is created on failure.
+    config_path = config_path.resolve()
+    config = load_config(config_path)
+    has_full_config = "project" in config
+    runtime_config = None
+    if has_full_config:
+        try:
+            runtime_config = resolve_runtime_config(config)
+        except (TypeError, ValueError):
+            if not allow_development:
+                raise
+            has_full_config = False
+    if not has_full_config and not allow_development:
+        raise RuntimeError("Phase 10 requires a complete validated config; pass allow_development=True only for fixtures")
+    production_mode = has_full_config and not allow_development
+    resource_config = runtime_config["runtime"]["resource_paths"] if runtime_config else None
+    current_config_hash = compute_config_hash(config)
+    current_generator_hash = generator_dependency_hash(resource_paths=resource_config)
+    expected_capacity_hash: str | None = None
+    if production_mode:
+        try:
+            pilot_payload = json.loads(pilot_report_path.resolve().read_text(encoding="utf-8"))
+            capacity_value = pilot_payload.get("capacity_report")
+            capacity_path = Path(str(capacity_value)) if capacity_value else None
+            if capacity_path is None:
+                raise RuntimeError("pilot report does not bind a capacity report")
+            if not capacity_path.is_absolute():
+                capacity_path = pilot_report_path.resolve().parent / capacity_path
+            capacity_path = capacity_path.resolve()
+            expected_capacity_hash = sha256_file(capacity_path)
+            capacity_payload = json.loads(capacity_path.read_text(encoding="utf-8"))
+            if capacity_payload.get("production_ready") is not True:
+                raise RuntimeError("production Phase 10 requires production-ready current capacity")
+            if capacity_payload.get("generator_dependency_hash") != current_generator_hash:
+                raise RuntimeError("production capacity report uses a stale generator/resource dependency")
+            if capacity_payload.get("config_hash") != current_config_hash:
+                raise RuntimeError("production capacity report uses a stale configuration")
+        except (OSError, ValueError, TypeError) as error:
+            # Preserve the normal blocked-review contract when the pilot or
+            # capacity artifact is simply absent: the gate writes the blocked
+            # report and raises before any output directory is touched.
+            if not pilot_report_path.exists() or not review_manifest_path.exists():
+                require_review_gate(
+                    review_manifest_path,
+                    pilot_report_path=pilot_report_path,
+                    pilot_output_path=pilot_output_path,
+                    review_sample_path=review_sample_path,
+                    blocked_report=blocked_report_path,
+                    attempted_output=output_dir,
+                    production=True,
+                    expected_generator_dependency_hash=current_generator_hash,
+                    expected_config_hash=current_config_hash,
+                )
+            raise RuntimeError("cannot validate current production capacity identity") from error
     # Gate before checking/creating the output directory. A pending review
     # must leave no candidate/final artifacts behind.
     review = require_review_gate(
@@ -306,6 +375,10 @@ def build_final_dataset(
         review_sample_path=review_sample_path,
         blocked_report=blocked_report_path,
         attempted_output=output_dir,
+        production=production_mode,
+        expected_generator_dependency_hash=current_generator_hash if production_mode else None,
+        expected_config_hash=current_config_hash if production_mode else None,
+        expected_capacity_report_sha256=expected_capacity_hash if production_mode else None,
     )
     if output_dir.exists():
         raise FileExistsError(f"refusing to overwrite existing final dataset directory: {output_dir}")
@@ -316,12 +389,9 @@ def build_final_dataset(
 
     candidate_dir = candidate_dir.resolve()
     split_input = split_input.resolve()
-    config_path = config_path.resolve()
-    config = load_config(config_path)
-    runtime_config = resolve_runtime_config(config) if "project" in config else None
+    runtime_config = runtime_config
     if seed is None:
-        seed = int(resolve_runtime_config(config)["runtime"]["seed"]) if "project" in config else 20260905
-    current_config_hash = compute_config_hash(config)
+        seed = int(runtime_config["runtime"]["seed"]) if runtime_config else 20260905
     comp = total_composition(config)
     split_settings = config.get("splits", {})
     split_fractions = {
@@ -337,7 +407,7 @@ def build_final_dataset(
         candidate_aggregate_path = Path("reports/phase9_candidate_aggregate.json")
     if candidate_aggregate_path is not None:
         candidate_aggregate_path = candidate_aggregate_path.resolve()
-    _, morphology_manifest = load_frozen_morphology()
+    _, morphology_manifest = load_frozen_morphology(resource_config.get("morphology") if resource_config else None)
     expected_morphology_resource_version = str(morphology_manifest.get("resource_version", "")).strip() or None
 
     try:
@@ -375,6 +445,8 @@ def build_final_dataset(
             config_hash=current_config_hash,
             review_manifest_sha256=review.manifest_hash,
             seed=seed,
+            expected_generator_sha256=current_generator_hash if production_mode else None,
+            production=production_mode,
         )
         if candidate_aggregate_path is not None:
             validate_candidate_aggregate(
@@ -507,6 +579,8 @@ def build_final_dataset(
                         outputs[f"{split}/{name}"] = {"path": f"{split}/{name}", "sha256": sha256_file(stage_path)}
             manifest = {
                 "status": "complete",
+                "production_ready": bool(production_mode),
+                "schema_version": 1,
                 "builder_version": DATASET_BUILDER_VERSION,
                 "counting_mode": config.get("dataset", {}).get("counting_mode"),
                 "target_total_pairs": comp["total"],
@@ -546,6 +620,7 @@ def build_final_dataset(
                 "candidate_aggregate_manifest": str(candidate_aggregate_path) if candidate_aggregate_path else None,
                 "candidate_aggregate_manifest_sha256": sha256_file(candidate_aggregate_path) if candidate_aggregate_path else None,
                 "candidate_generator_sha256": shard_info["generator_sha256"],
+                "generator_dependency_hash": shard_info["generator_dependency_hash"],
                 "quality_manifest_sha256": shard_info["quality_manifest_sha256"],
                 "split_report_sha256": shard_info["split_report_sha256"],
                 "input_sqlite_sha256": shard_info["input_sqlite_sha256"],
@@ -588,6 +663,7 @@ def main() -> None:
     parser.add_argument("--failure-report", type=Path, default=Path("reports/phase10_failure.json"))
     parser.add_argument("--config", type=Path, default=Path("config/filly.yaml"))
     parser.add_argument("--candidate-aggregate", type=Path)
+    parser.add_argument("--allow-development", action="store_true", help="explicitly allow non-production fixture output")
     parser.add_argument("--seed", type=int)
     args = parser.parse_args()
     try:
@@ -601,7 +677,8 @@ def main() -> None:
             failure_report_path=args.failure_report,
             seed=args.seed,
             config_path=args.config,
-            candidate_aggregate_path=args.candidate_aggregate,
+        candidate_aggregate_path=args.candidate_aggregate,
+        allow_development=args.allow_development,
         )
     except ReviewGateError as error:
         print(json.dumps({"status": "blocked", "gate": error.result.status, "reason": error.result.reason}, ensure_ascii=True))

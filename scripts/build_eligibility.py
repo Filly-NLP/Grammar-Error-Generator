@@ -14,6 +14,7 @@ if __package__ in (None, ""):
 from src.geg.generators import GENERATOR_VERSION, GENERATOR_POLICY_STATUS, all_tag_ids, generate_candidates, production_coverage
 from src.geg.config import config_hash, load_config, resolve_runtime_config
 from src.geg.hashing import sha256_file, generator_dependency_hash
+from src.geg.generators import GeneratorContext
 from src.geg.tags import registry
 from src.geg.artifacts import validate_destinations, verify_manifest
 from src.geg.telemetry import REJECTION_SAMPLE_LIMIT, telemetry_from_result
@@ -72,6 +73,8 @@ def build_report(
     )
     loaded_config = load_config(config_path.resolve())
     runtime_config = resolve_runtime_config(loaded_config)
+    resource_config = runtime_config["runtime"]["resource_paths"]
+    generator_context = GeneratorContext.load(resource_config)
     config_digest = config_hash(loaded_config)
     provenance = verify_manifest(split_report, input_path, config_digest)
     if not provenance.get("quality_manifest_sha256") or not provenance.get("input_sqlite_sha256"):
@@ -99,7 +102,7 @@ def build_report(
         for clean_id, text, split in zip(clean_ids, texts, splits):
             input_rows += 1
             for tag_id in all_tag_ids():
-                result = generate_candidates(str(text), tag_id, compute_alignment=False)
+                result = generate_candidates(str(text), tag_id, compute_alignment=False, context=generator_context)
                 bucket = rows_by_tag[tag_id]
                 bucket["status"] = result.status
                 bucket["reason"] = result.reason or ""
@@ -127,7 +130,7 @@ def build_report(
 
     tags = []
     metadata = {item.id: item for item in registry()}
-    coverage = production_coverage()
+    coverage = production_coverage(resource_config)
     for tag_id in all_tag_ids():
         bucket = rows_by_tag[tag_id]
         tags.append({
@@ -182,8 +185,8 @@ def build_report(
         "generator_version": GENERATOR_VERSION,
         "generator_policy_status": GENERATOR_POLICY_STATUS,
         "effective_runtime": runtime_config.get("runtime", {}),
-        "generator_sha256": generator_dependency_hash(),
-        "generator_dependency_hash": generator_dependency_hash(),
+        "generator_sha256": generator_dependency_hash(resource_paths=resource_config),
+        "generator_dependency_hash": generator_dependency_hash(resource_paths=resource_config),
         "input_rows": input_rows,
         "tag_count": len(tags),
         "registered_tag_count": len(tags),

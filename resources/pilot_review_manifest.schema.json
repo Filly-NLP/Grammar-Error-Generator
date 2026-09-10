@@ -15,10 +15,13 @@
     "accepted_rows",
     "revised_rows",
     "rejected_rows",
-    "row_decisions"
+    "row_decisions",
+    "generator_dependency_hash",
+    "config_hash",
+    "capacity_report_sha256"
   ],
   "properties": {
-    "schema_version": {"const": 1},
+    "schema_version": {"const": 2},
     "status": {"enum": ["complete", "incomplete", "stale", "revise", "reject"]},
     "decision": {"type": "string"},
     "reviewer": {"type": "string"},
@@ -26,19 +29,25 @@
     "reviewed_at": {"type": "string"},
     "target": {
       "type": "object",
-      "required": ["pilot_report", "pilot_output", "review_sample"],
+      "required": ["pilot_report", "pilot_output", "review_sample", "pilot_report_sha256", "pilot_output_sha256", "review_sample_sha256", "generator_dependency_hash", "config_hash", "capacity_report_sha256"],
       "properties": {
         "pilot_report": {"type": "string"},
         "pilot_output": {"type": "string"},
         "review_sample": {"type": "string"},
         "pilot_report_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "pilot_output_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "review_sample_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        "review_sample_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "generator_dependency_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "config_hash": {"oneOf": [{"type": "string", "pattern": "^[0-9a-f]{64}$"}, {"type": "null"}]},
+        "capacity_report_sha256": {"oneOf": [{"type": "string", "pattern": "^[0-9a-f]{64}$"}, {"type": "null"}]}
       }
     },
     "pilot_report_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "pilot_output_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "review_sample_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "generator_dependency_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "config_hash": {"oneOf": [{"type": "string", "pattern": "^[0-9a-f]{64}$"}, {"type": "null"}]},
+    "capacity_report_sha256": {"oneOf": [{"type": "string", "pattern": "^[0-9a-f]{64}$"}, {"type": "null"}]},
     "expected_review_rows": {"type": "integer", "minimum": 1},
     "reviewed_rows": {"type": "integer", "minimum": 0},
     "accepted_rows": {"type": "integer", "minimum": 0},

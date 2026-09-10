@@ -26,8 +26,8 @@ if __package__ in {None, ""}:
 
 from src.geg.config import config_hash as compute_config_hash, load_config, resolve_runtime_config
 from src.geg.dataset import SPLITS
-from src.geg.generators import GENERATOR_VERSION, GENERATOR_POLICY_STATUS, all_tag_ids, generate_candidates
-from src.geg.hashing import sha256_file, sha256_files, generator_dependency_hash
+from src.geg.generators import GENERATOR_VERSION, GENERATOR_POLICY_STATUS, GeneratorContext, all_tag_ids, generate_candidates
+from src.geg.hashing import sha256_file, generator_dependency_hash, legacy_generator_hash
 from src.geg.review import ReviewGateError, require_review_gate
 from src.geg.artifacts import validate_destinations
 from src.geg.schema import gec_arrow_schema
@@ -414,6 +414,7 @@ def build_candidate_shard(
     shard_index: int = 0,
     shard_count: int = 1,
     max_rows: int | None = None,
+    allow_development: bool = False,
 ) -> dict[str, Any]:
     if shard_count < 1 or shard_index < 0 or shard_index >= shard_count:
         raise ValueError("shard_index must be in [0, shard_count)")
@@ -437,8 +438,42 @@ def build_candidate_shard(
         },
         destinations,
     )
+    # Resolve the current configuration and capacity before consulting review.
+    # The approval must be for the exact state this invocation will use; a
+    # crafted legacy approval cannot bypass this preflight.
+    input_path = input_path.resolve()
+    capacity_report_path = capacity_report_path.resolve()
+    config_path = config_path.resolve()
+    config = load_config(config_path)
+    has_full_config = "project" in config
+    runtime_config = None
+    if has_full_config:
+        try:
+            runtime_config = resolve_runtime_config(config)
+        except (TypeError, ValueError):
+            if not allow_development:
+                raise
+            has_full_config = False
+    if not has_full_config and not allow_development:
+        raise RuntimeError("Phase 9 requires a complete validated config; pass allow_development=True only for fixtures")
+    production_mode = has_full_config and not allow_development
+    resource_config = runtime_config["runtime"]["resource_paths"] if runtime_config else None
+    current_generator_hash = generator_dependency_hash(resource_paths=resource_config)
+    capacity = json.loads(capacity_report_path.read_text(encoding="utf-8"))
+    capacity_sha256 = sha256_file(capacity_report_path)
+    current_config_hash = compute_config_hash(config)
+    if production_mode:
+        if capacity.get("production_ready") is not True:
+            raise RuntimeError("production Phase 9 requires production_ready=true in the current capacity report")
+        if capacity.get("generator_dependency_hash") != current_generator_hash:
+            raise RuntimeError("production capacity report must use the current generator/resource dependency hash")
+        if capacity.get("config_hash") != current_config_hash:
+            raise RuntimeError("production capacity report must use the current configuration hash")
+    elif capacity.get("production_ready") is True:
+        raise RuntimeError("development Phase 9 invocation cannot claim production readiness")
+
     # This is deliberately the first operation that can fail for a production
-    # run.  A pending review therefore cannot create an output directory/file.
+    # run. A pending or stale review therefore cannot create an output file.
     review = require_review_gate(
         review_manifest_path,
         pilot_report_path=pilot_report_path,
@@ -446,6 +481,10 @@ def build_candidate_shard(
         review_sample_path=review_sample_path,
         blocked_report=blocked_report_path,
         attempted_output=output_path,
+        production=production_mode,
+        expected_generator_dependency_hash=current_generator_hash if production_mode else None,
+        expected_config_hash=current_config_hash if production_mode else None,
+        expected_capacity_report_sha256=capacity_sha256 if production_mode else None,
     )
     # Keep the review result itself bound to the exact pilot report consumed by
     # this invocation.  The JSON checks below bind the capacity artifact; this
@@ -467,27 +506,26 @@ def build_candidate_shard(
         import pyarrow.parquet as pq
     except ImportError as error:
         raise RuntimeError("Phase 9 requires pyarrow") from error
-    input_path = input_path.resolve()
-    capacity_report_path = capacity_report_path.resolve()
-    config_path = config_path.resolve()
-    capacity = json.loads(capacity_report_path.read_text(encoding="utf-8"))
-    if capacity.get("production_ready") is False:
+    generator_context = GeneratorContext.load(resource_config) if resource_config else None
+    if production_mode and capacity.get("production_ready") is False:
         raise RuntimeError("capacity report is not production-ready: implementation/resource coverage is incomplete")
     input_sha256 = sha256_file(input_path)
     if capacity.get("input_sha256") != input_sha256:
         raise RuntimeError("stale capacity report: split input hash does not match")
-    generator_sha256 = generator_dependency_hash()
-    legacy_generator_sha256 = sha256_files((Path(__file__).resolve().parents[1] / "src/geg/generators.py", Path(__file__).resolve().parents[1] / "src/geg/alignment.py"))
+    generator_sha256 = current_generator_hash
     expected_generator = capacity.get("generator_dependency_hash", capacity.get("generator_sha256"))
     if capacity.get("production_ready") is True and expected_generator != generator_sha256:
         raise RuntimeError("production capacity report must use the canonical generator dependency hash")
-    legacy_allowed = "production_ready" not in capacity and "generator_dependency_hash" not in capacity
-    if capacity.get("generator_version") != GENERATOR_VERSION or expected_generator != generator_sha256 and not (legacy_allowed and expected_generator == legacy_generator_sha256):
+    development_fixture = allow_development and "production_ready" not in capacity and "generator_dependency_hash" not in capacity
+    if capacity.get("generator_version") != GENERATOR_VERSION or (
+        expected_generator != generator_sha256
+        and not (development_fixture and expected_generator == legacy_generator_hash())
+    ):
         raise RuntimeError("stale capacity report: generator source/version does not match")
-    config = load_config(config_path)
+    # ``config`` is loaded above so the production/development distinction is
+    # explicit before any candidate output can be published.
     if seed is None:
-        seed = int(resolve_runtime_config(config)["runtime"]["seed"]) if "project" in config else 20260905
-    current_config_hash = compute_config_hash(config)
+        seed = int(runtime_config["runtime"]["seed"]) if runtime_config else 20260905
     phase9 = config.get("phase9", {}) if isinstance(config.get("phase9", {}), dict) else {}
     dataset_settings = config.get("dataset", {}) if isinstance(config.get("dataset", {}), dict) else {}
     configured_buffer = phase9.get("candidate_buffer_ratio", dataset_settings.get("candidate_buffer_ratio"))
@@ -498,7 +536,6 @@ def build_candidate_shard(
     buffer_rows = max(max_rows, math.ceil(max_rows * candidate_buffer_ratio))
     if capacity.get("config_hash") != current_config_hash:
         raise RuntimeError("stale capacity report: configuration hash does not match")
-    capacity_sha256 = sha256_file(capacity_report_path)
     try:
         pilot_payload = json.loads(pilot_report_path.resolve().read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
@@ -605,7 +642,7 @@ def build_candidate_shard(
                     continue
                 clean = {name: values[name][index] for name in columns}
                 for tag in tags:
-                    result = generate_candidates(str(clean["text"]), tag, compute_alignment=True)
+                    result = generate_candidates(str(clean["text"]), tag, compute_alignment=True, context=generator_context)
                     if not result.candidates and result.status == "supported":
                         not_applicable += int(result.not_applicable or 1)
                     for reason, count in (result.rejected or {}).items():
@@ -720,7 +757,7 @@ def build_candidate_shard(
             "split_counts": dict(split_counts),
             "tag_counts": dict(tag_counts),
             "tag_status": tag_status,
-            "production_ready": bool(capacity.get("production_ready", False)),
+            "production_ready": bool(production_mode and capacity.get("production_ready", False)),
             "collision_store": "stable-rank bounded in-memory selection",
             "collision_rejections": rejected.get("output_pair_collision", 0),
             "rejections": dict(rejected),
@@ -786,6 +823,7 @@ def main() -> None:
     parser.add_argument("--shard-index", type=int, default=0)
     parser.add_argument("--shard-count", type=int, default=1)
     parser.add_argument("--max-rows", type=int, default=None)
+    parser.add_argument("--allow-development", action="store_true", help="explicitly allow non-production fixture artifacts")
     args = parser.parse_args()
     try:
         report = build_candidate_shard(
@@ -800,6 +838,7 @@ def main() -> None:
             shard_index=args.shard_index,
             shard_count=args.shard_count,
             max_rows=args.max_rows,
+            allow_development=args.allow_development,
         )
     except ReviewGateError as error:
         print(json.dumps({"status": "blocked", "gate": error.result.status, "reason": error.result.reason}, ensure_ascii=True))

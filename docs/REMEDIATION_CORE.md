@@ -22,7 +22,7 @@ This document records the core remediation slice completed on 2026-09-10.
 
 The initial core slice passed `.venv\\Scripts\\python.exe -m pytest -q` with
 **148 passed**; subsequent reviewer hardening brings the current full-suite
-result to **151 passed**.
+result to **160 passed**.
 
 `compileall` and `git diff --check` passed. The source SQLite database was not
 opened for writing. No new pilot, candidate shard, or final dataset was built.

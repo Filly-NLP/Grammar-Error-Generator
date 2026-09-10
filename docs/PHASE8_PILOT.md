@@ -1,8 +1,10 @@
 # Phase 8 pilot
 
-The pilot artifact is `data/pilot/gec_pilot_100k.parquet`. It contains exactly
-100,000 errorful pairs with one inverse operation per row, split 70,000 / 15,000
-/ 15,000 across train, dev, and synthetic test. Every row inherits the clean
+The pilot artifact is `data/pilot/gec_pilot_100k.parquet`. Its total is
+authoritative in `config/filly.yaml` under `phase8.pilot_total`; split targets
+are derived from the configured train/dev/synthetic-test fractions with
+deterministic largest-remainder allocation. The default is 100,000 rows split
+70,000 / 15,000 / 15,000. Every row inherits the clean
 target's Phase 5 split; generated rows are never re-split independently.
 
 The pilot builder only uses supported capacities from the Phase 6 census. It
@@ -25,8 +27,12 @@ token index (`target_token_index - 1`) when the operation uses
 `position=prepend`, and a JSON/Parquet null `source_token_index`; `$START` is
 the documented sentinel rather than a fabricated source token index.
 
-The report records hashes for the split input, capacity report, generator
-sources, configuration, and pilot output. Automated structural review is
+The report records `pilot_total`, `pilot_targets`, and hashes for the split
+input, capacity report, generator/resource dependency, configuration, and
+pilot output. The Phase 8 review manifest is schema v2 and binds pilot hashes
+at both root and target, plus the current generator/config/capacity identities;
+schema-v1 or missing production identities are incompatible with Phase 9/10.
+Automated structural review is
 complete; human linguistic review is pending. The pilot is not claimed as
 reviewed or production-ready.
 

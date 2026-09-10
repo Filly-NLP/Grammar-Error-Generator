@@ -160,6 +160,7 @@ class Phase10FixtureTests(unittest.TestCase):
                 pilot_output_path=pilot,
                 review_sample_path=sample,
                 config_path=config_path,
+                allow_development=True,
             )
             self.assertEqual(10, report_out["target_total_pairs"])
             self.assertEqual({"train": 7, "dev": 2, "synthetic_test": 1}, report_out["split_counts"])
@@ -179,6 +180,7 @@ class Phase10FixtureTests(unittest.TestCase):
                     pilot_output_path=pilot,
                     review_sample_path=sample,
                     config_path=config_path,
+                    allow_development=True,
                     seed=999,
                 )
             self.assertFalse(wrong_seed_output.exists())
@@ -190,6 +192,7 @@ class Phase10FixtureTests(unittest.TestCase):
                     pilot_output_path=pilot,
                     review_sample_path=sample,
                     config_path=config_path,
+                    allow_development=True,
                 )
 
     def test_pending_review_blocks_without_output(self) -> None:
@@ -245,6 +248,7 @@ class Phase10FixtureTests(unittest.TestCase):
                 split, capacity, output, review_manifest_path=review_path,
                 pilot_report_path=report, pilot_output_path=pilot,
                 review_sample_path=sample, config_path=config_path,
+                allow_development=True,
                 shard_index=0, shard_count=1, max_rows=1,
             )
             self.assertEqual(1, manifest["candidate_rows"])
@@ -258,6 +262,7 @@ class Phase10FixtureTests(unittest.TestCase):
                     split, capacity, unbounded, review_manifest_path=review_path,
                     pilot_report_path=report, pilot_output_path=pilot,
                     review_sample_path=sample, config_path=config_path,
+                    allow_development=True,
                     shard_index=0, shard_count=1,
                 )
             self.assertFalse(unbounded.exists())

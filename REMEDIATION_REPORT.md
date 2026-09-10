@@ -30,6 +30,7 @@ or final 1M dataset were fabricated.
 | P1-10 evaluation field drift | fixed | `error_families` and `grammar_families` could drift; canonical fields were not enforced | `grammar_families` and `real_or_controlled` are canonical; deprecated aliases are normalized and conflicting values fail. Tag/family correspondence is validated. | `src/evaluation_noise/schema.py`, `src/evaluation_noise/template.py`, `src/evaluation_noise/__init__.py`, `src/evaluation/metrics.py` | Frozen JSONL exposes one canonical schema | Reviewed evaluation rows |
 | P1-11 rejection telemetry | fixed | generators returned only supported/unavailable and hid policy rejection causes | Structured not-applicable, selected, rejected counters, reason codes, and bounded samples flow through Phase 6/8/9/10. | `src/geg/generators.py`, `src/geg/telemetry.py`, Phase 6/8/9/10 scripts, `tests/test_phase9_reporting.py` | Manifests are auditable without unbounded row-level logs | Human review of provisional linguistic policy |
 | P2-12 conservative linguistic heuristics | partially fixed / provisional | broad function-word deletion/duplication and punctuation substitutions could create ambiguous pairs | Reviewed function-word subset, boundary guards, explicit unsafe rejection, provisional confidence, exact reviewed punctuation-context matching, and resource-backed punctuation substitutions are enforced. Without approved punctuation contexts, substitution capacity remains zero. | `src/geg/generators.py`, `src/geg/resource_freeze.py`, `scripts/freeze_punctuation_resource.py`, `tests/test_remediation_core.py`, `docs/REMEDIATION_CORE.md` | Generator policy is marked `provisional_pending_linguistic_review`; pilot must be re-reviewed | Filipino linguist approval and reviewed function/punctuation context resources |
+| Second-pass review bypass/span/resource follow-up | fixed / blocked | Production callers could consult review before binding the current config/capacity identity; morphology operations used the clean token end for longer erroneous forms; resource paths were code-selected | Production callers now preflight current config/capacity and call `require_review_gate(production=True, expected_...)`; morphology source spans cover the generated surface including punctuation; validated config selects versioned payload/manifest paths and dependency hashing binds them; freeze CLIs accept v2 resource versions | `src/geg/review.py`, `scripts/build_candidates.py`, `scripts/build_dataset.py`, `src/geg/generators.py`, `src/geg/config.py`, `src/geg/hashing.py`, `src/geg/resource_freeze.py`, `tests/test_second_pass_slice.py` | Existing Phase 6/8/9/10 artifacts remain stale; no production output regenerated | Genuine reviewed morphology/construction/punctuation resources and fresh human pilot approval |
 
 ## Commands and evidence
 
@@ -44,16 +45,17 @@ git diff --check
 if(Test-Path corpus.db){(Get-FileHash corpus.db -Algorithm SHA256).Hash.ToLower()}
 ```
 
-Current test result: **151 passed**. The test suite covers the registry/state
+Current test result: **160 passed**. The test suite covers the registry/state
 contracts, config ratios and seed, split behavior, freeze/load rejection,
 resource-backed generation, morphology provenance, review gates, hash stability
 outside the repository CWD, candidate order independence, synthetic diagnostics,
 evaluation schema/baselines, noise replay, and leakage protections.
 
 Safe blocked preflights invoked `build_candidate_shard` and
-`build_final_dataset` with temporary output paths and the current missing review
-manifest. Both returned `ReviewGateError(incomplete: review manifest does not
-exist)` and confirmed `candidate_created=False` and `final_created=False`.
+`build_final_dataset` with temporary output paths. The final-output probe
+returned `ReviewGateError(incomplete: review manifest does not exist)` and
+confirmed `final_created=False`; the candidate probe failed closed on its
+missing capacity input and confirmed `candidate_created=False`.
 
 The read-only source database remains unchanged at SHA-256
 `aadfbbaf0f9ee428e394395a4c73a13dcb0a798b75ca2356eece0f1df0fc7f50`.
@@ -78,4 +80,22 @@ preflights create only blocked reports and no candidate/final dataset output.
 ```text
 CODE COMPLETE FOR RESOURCE INGESTION/FREEZING AND PIPELINE HARDENING
 PRODUCTION GENERATION BLOCKED PENDING GENUINE REVIEWED RESOURCES AND HUMAN REVIEW
+
+## Second-pass refresh (2026-09-10)
+
+The Phase 8 pilot total is now authoritative in `phase8.pilot_total`, with
+configured split-derived targets recorded in the pilot report. Review approval
+uses schema v2 and binds root/target pilot hashes, generator dependency,
+configuration, and capacity identities. Runtime hashing no longer includes
+external absolute mapping paths, and the Phase 10 manifest records the
+canonical generator dependency hash. Frozen-resource loading validates review
+metadata, resource hashes, and row counts; synthetic diagnostics validate the
+observed row count against the final manifest. Existing Phase 6/8/9/10
+artifacts are stale and were not regenerated.
+
+The older manuscript's broad wording that GEG may inject informal noise must
+be synchronized with the refined `Implementation_Plan.md`: grammar-only GEC
+training and synthetic-test data remain separate from the controlled/authentic
+informal end-to-end evaluation pipeline. This is a thesis-document task, not a
+reason to mix the datasets in code.
 ```

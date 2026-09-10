@@ -15,8 +15,8 @@ if __package__ in (None, ""):
 
 from src.geg.alignment import AlignmentResult, validate_replay
 from src.geg.config import config_hash as compute_config_hash, load_config, resolve_runtime_config
-from src.geg.generators import GENERATOR_VERSION, GENERATOR_POLICY_STATUS, Candidate, all_tag_ids, generate_candidates, get_generator_context
-from src.geg.hashing import sha256_file, sha256_files, generator_dependency_hash
+from src.geg.generators import GENERATOR_VERSION, GENERATOR_POLICY_STATUS, Candidate, GeneratorContext, all_tag_ids, generate_candidates, get_generator_context
+from src.geg.hashing import sha256_file, generator_dependency_hash, legacy_generator_hash
 from src.geg.ingest import normalize_text
 from src.geg.tags import require_registered, registry
 from src.geg.states import state_by_id
@@ -25,9 +25,23 @@ from src.geg.schema import gec_arrow_schema
 from src.geg.telemetry import REJECTION_SAMPLE_LIMIT
 
 
-PILOT_TARGETS = {"train": 70_000, "dev": 15_000, "synthetic_test": 15_000}
-SPLIT_ORDER = {name: index for index, name in enumerate(PILOT_TARGETS)}
+DEFAULT_PILOT_TARGETS = {"train": 70_000, "dev": 15_000, "synthetic_test": 15_000}
+# Compatibility seam for development fixtures that explicitly monkeypatch the
+# pilot target map. Normal runs resolve the targets from config.
+PILOT_TARGETS = dict(DEFAULT_PILOT_TARGETS)
+SPLIT_ORDER = {name: index for index, name in enumerate(DEFAULT_PILOT_TARGETS)}
 PILOT_BUILDER_VERSION = "filly-phase8-pilot-v3-capacity-refill"
+
+
+def _pilot_targets(runtime_config: dict[str, Any]) -> dict[str, int]:
+    """Derive pilot split targets from phase8.pilot_total and split ratios."""
+    if PILOT_TARGETS != DEFAULT_PILOT_TARGETS:
+        return dict(PILOT_TARGETS)
+    runtime = runtime_config.get("runtime", {})
+    total = int(runtime.get("pilot_total", 100_000))
+    fractions = runtime.get("split_fractions", {"train": "0.70", "dev": "0.15", "synthetic_test": "0.15"})
+    from src.geg.dataset import split_composition
+    return split_composition(total, fractions)
 
 
 def _write_json(path: Path, value: object) -> None:
@@ -61,7 +75,7 @@ def _pair_id(seed: int, split: str, clean_id: str, candidate: Candidate) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()[:32]
 
 
-def _structurally_valid(candidate: Candidate) -> tuple[bool, str, AlignmentResult]:
+def _structurally_valid(candidate: Candidate, *, expected_resource_version: str | None = None) -> tuple[bool, str, AlignmentResult]:
     try:
         require_registered(candidate.correction_tag)
     except ValueError:
@@ -91,7 +105,7 @@ def _structurally_valid(candidate: Candidate) -> tuple[bool, str, AlignmentResul
             return False, "unsupported_morphology_target_state", AlignmentResult(False, (), (), None, "unsupported_morphology_target_state")
         if source_state.id == target_state.id:
             return False, "same_morphology_state", AlignmentResult(False, (), (), None, "same_morphology_state")
-        expected_resource_version = str(get_generator_context().morphology_manifest.get("resource_version", "")).strip()
+        expected_resource_version = expected_resource_version or str(get_generator_context().morphology_manifest.get("resource_version", "")).strip()
         if not expected_resource_version or candidate.morphology_resource_version != expected_resource_version:
             return False, "morphology_resource_version_mismatch", AlignmentResult(False, (), (), None, "morphology_resource_version_mismatch")
     if candidate.generation_operation.get("type") not in {
@@ -190,8 +204,8 @@ def _review_markdown(report: dict[str, Any]) -> str:
         "| Split | Requested | Produced |",
         "|---|---:|---:|",
     ]
-    for split in PILOT_TARGETS:
-        lines.append(f"| {split} | {PILOT_TARGETS[split]} | {report['split_counts'].get(split, 0)} |")
+    for split, target in report["pilot_targets"].items():
+        lines.append(f"| {split} | {target} | {report['split_counts'].get(split, 0)} |")
     lines.extend([
         "",
         "## Review state",
@@ -236,18 +250,26 @@ def build_pilot(
             "must be implemented and reviewed before Phase 8 can unlock production"
         )
     input_sha256 = sha256_file(input_path)
-    generator_sha256 = generator_dependency_hash()
-    legacy_generator_sha256 = sha256_files((Path(__file__).resolve().parents[1] / "src/geg/generators.py", Path(__file__).resolve().parents[1] / "src/geg/alignment.py"))
+    loaded_config = load_config(config_path.resolve())
+    runtime_config = resolve_runtime_config(loaded_config)
+    resource_config = runtime_config["runtime"]["resource_paths"]
+    generator_sha256 = generator_dependency_hash(resource_paths=resource_config)
+    development_fixture = "project" not in loaded_config and "production_ready" not in capacity and "generator_dependency_hash" not in capacity
     if capacity.get("input_sha256") != input_sha256:
         raise RuntimeError("stale capacity report: split input hash does not match; rerun Phase 6")
     expected_generator = capacity.get("generator_dependency_hash", capacity.get("generator_sha256"))
     if capacity.get("production_ready") is True and expected_generator != generator_sha256:
         raise RuntimeError("production capacity report must use the canonical generator dependency hash")
-    legacy_allowed = "production_ready" not in capacity and "generator_dependency_hash" not in capacity
-    if capacity.get("generator_version") != GENERATOR_VERSION or expected_generator != generator_sha256 and not (legacy_allowed and expected_generator == legacy_generator_sha256):
+    if capacity.get("generator_version") != GENERATOR_VERSION or (
+        expected_generator != generator_sha256
+        and not (development_fixture and expected_generator == legacy_generator_hash())
+    ):
         raise RuntimeError("stale capacity report: generator version/hash does not match; rerun Phase 6")
-    loaded_config = load_config(config_path.resolve())
-    runtime_config = resolve_runtime_config(loaded_config)
+    generator_context = GeneratorContext.load(resource_config)
+    pilot_targets = _pilot_targets(runtime_config)
+    split_order = {name: index for index, name in enumerate(pilot_targets)}
+    if "project" in loaded_config and capacity.get("production_ready") is not True and not allow_partial_generator_coverage:
+        raise RuntimeError("production Phase 8 requires production_ready=true in the current capacity report")
     current_config_hash = compute_config_hash(loaded_config)
     seed = int(runtime_config["runtime"]["seed"] if seed is None else seed)
     if capacity.get("config_hash") != current_config_hash:
@@ -262,7 +284,7 @@ def build_pilot(
     tags = [tag_id for tag_id in all_tag_ids() if tag_id in rows]
     capacities_by_split: dict[str, dict[str, int]] = {}
     quotas: dict[str, dict[str, int]] = {}
-    for split, target in PILOT_TARGETS.items():
+    for split, target in pilot_targets.items():
         capacities_by_split[split] = {}
         for tag in tags:
             row = rows[tag]
@@ -307,7 +329,7 @@ def build_pilot(
         values = {name: batch.column(name).to_pylist() for name in columns}
         for index in range(len(values["clean_id"])):
             split = str(values["split"][index])
-            if split not in PILOT_TARGETS:
+            if split not in pilot_targets:
                 reject("unknown_split", split=split, clean_id=str(values["clean_id"][index]))
                 continue
             clean = {name: values[name][index] for name in columns}
@@ -320,10 +342,10 @@ def build_pilot(
                     and len(fallback[split]) >= 1_000
                 ):
                     continue
-                result = generate_candidates(str(clean["text"]), tag, compute_alignment=False)
+                result = generate_candidates(str(clean["text"]), tag, compute_alignment=False, context=generator_context)
                 merge_generator_rejections(result, split=split, clean_id=str(clean["clean_id"]), tag=tag)
                 for candidate in result.candidates:
-                    valid, reason, alignment = _structurally_valid(candidate)
+                    valid, reason, alignment = _structurally_valid(candidate, expected_resource_version=str(generator_context.morphology_manifest.get("resource_version", "")).strip() or None)
                     if not valid:
                         reject(reason, split=split, clean_id=str(clean["clean_id"]), tag=tag)
                         continue
@@ -332,25 +354,25 @@ def build_pilot(
                         reject("output_pair_collision", split=split, clean_id=str(clean["clean_id"]), tag=tag)
                         continue
                     current_tag = selected_by_tag[(split, tag)]
-                    if current_tag < quotas[split].get(tag, 0) and selected_by_split[split] < PILOT_TARGETS[split]:
+                    if current_tag < quotas[split].get(tag, 0) and selected_by_split[split] < pilot_targets[split]:
                         selected_pairs.add(pair_key)
                         selected_by_tag[(split, tag)] += 1
                         selected_by_split[split] += 1
                         selected.append(_record(clean, candidate, seed, config_hash, alignment))
-                    elif len(fallback[split]) < 20_000 and selected_by_split[split] < PILOT_TARGETS[split]:
+                    elif len(fallback[split]) < 20_000 and selected_by_split[split] < pilot_targets[split]:
                         fallback[split].append((clean, candidate))
                         fallback_seen.add(pair_key)
 
     # Fill any capacity-estimation gaps with deterministic overflow candidates.
     refill_performed = False
-    for split in PILOT_TARGETS:
+    for split in pilot_targets:
         for clean, candidate in fallback[split]:
-            if selected_by_split[split] >= PILOT_TARGETS[split]:
+            if selected_by_split[split] >= pilot_targets[split]:
                 break
             pair_key = (candidate.source_text, candidate.target_text)
             if pair_key in selected_pairs:
                 continue
-            valid, reason, alignment = _structurally_valid(candidate)
+            valid, reason, alignment = _structurally_valid(candidate, expected_resource_version=str(generator_context.morphology_manifest.get("resource_version", "")).strip() or None)
             if not valid:
                 reject(reason, split=split, clean_id=str(clean["clean_id"]), tag=candidate.correction_tag)
                 continue
@@ -361,28 +383,28 @@ def build_pilot(
 
         # If structural rejection or collisions exhausted the bounded reserve,
         # deterministically rescan without tag quotas to fill remaining slots.
-        if selected_by_split[split] < PILOT_TARGETS[split]:
+        if selected_by_split[split] < pilot_targets[split]:
             refill_performed = True
             for batch in parquet.iter_batches(columns=columns):
                 values = {name: batch.column(name).to_pylist() for name in columns}
                 for index in range(len(values["clean_id"])):
-                    if selected_by_split[split] >= PILOT_TARGETS[split]:
+                    if selected_by_split[split] >= pilot_targets[split]:
                         break
                     if str(values["split"][index]) != split:
                         continue
                     clean = {name: values[name][index] for name in columns}
                     for tag in tags:
-                        if selected_by_split[split] >= PILOT_TARGETS[split]:
+                        if selected_by_split[split] >= pilot_targets[split]:
                             break
-                        result = generate_candidates(str(clean["text"]), tag, compute_alignment=False)
+                        result = generate_candidates(str(clean["text"]), tag, compute_alignment=False, context=generator_context)
                         merge_generator_rejections(result, split=split, clean_id=str(clean["clean_id"]), tag=tag)
                         for candidate in result.candidates:
-                            if selected_by_split[split] >= PILOT_TARGETS[split]:
+                            if selected_by_split[split] >= pilot_targets[split]:
                                 break
                             pair_key = (candidate.source_text, candidate.target_text)
                             if pair_key in selected_pairs:
                                 continue
-                            valid, reason, alignment = _structurally_valid(candidate)
+                            valid, reason, alignment = _structurally_valid(candidate, expected_resource_version=str(generator_context.morphology_manifest.get("resource_version", "")).strip() or None)
                             if not valid:
                                 reject(reason, split=split, clean_id=str(clean["clean_id"]), tag=tag)
                                 continue
@@ -390,10 +412,10 @@ def build_pilot(
                             selected_by_split[split] += 1
                             selected_by_tag[(split, candidate.correction_tag)] += 1
                             selected.append(_record(clean, candidate, seed, config_hash, alignment))
-                if selected_by_split[split] >= PILOT_TARGETS[split]:
+                if selected_by_split[split] >= pilot_targets[split]:
                     break
 
-    selected.sort(key=lambda row: (SPLIT_ORDER[row["split"]], row["correction_tags"][0], row["clean_id"], row["pair_id"]))
+    selected.sort(key=lambda row: (split_order[row["split"]], row["correction_tags"][0], row["clean_id"], row["pair_id"]))
     output_path.parent.mkdir(parents=True, exist_ok=True)
     table = pa.Table.from_pylist(selected, schema=gec_arrow_schema())
     pq.write_table(table, output_path)
@@ -409,7 +431,7 @@ def build_pilot(
             review_counts[key] += 1
             stream.write(json.dumps(row, ensure_ascii=False) + "\n")
 
-    requested = sum(PILOT_TARGETS.values())
+    requested = sum(pilot_targets.values())
     report: dict[str, Any] = {
         "status": "complete" if len(selected) == requested else "shortfall",
         "input": str(input_path),
@@ -425,10 +447,12 @@ def build_pilot(
         "pilot_builder_version": PILOT_BUILDER_VERSION,
         "output": str(output_path),
         "requested_rows": requested,
+        "pilot_total": requested,
+        "pilot_targets": pilot_targets,
         "produced_rows": len(selected),
         "shortfall": requested - len(selected),
         "split_counts": dict(selected_by_split),
-        "tag_counts": {f"{split}:{tag}": selected_by_tag[(split, tag)] for split in PILOT_TARGETS for tag in tags},
+        "tag_counts": {f"{split}:{tag}": selected_by_tag[(split, tag)] for split in pilot_targets for tag in tags},
         "quotas": quotas,
         "capacities_by_split": capacities_by_split,
         "refill_performed": refill_performed,

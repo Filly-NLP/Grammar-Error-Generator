@@ -21,17 +21,32 @@ def load_resource(name: str) -> dict[str, Any]:
     return value
 
 
-def load_frozen_constructions() -> tuple[tuple[dict[str, Any], ...], dict[str, Any]]:
+def _selected_path(value: str | Path, root: Path) -> Path:
+    path = (root / Path(value)).resolve() if not Path(value).is_absolute() else Path(value).resolve()
+    try:
+        path.relative_to(root.resolve())
+    except ValueError as error:
+        raise ValueError("configured resource must remain inside the repository") from error
+    return path
+
+
+def load_frozen_constructions(resource_paths: dict[str, str] | None = None) -> tuple[tuple[dict[str, Any], ...], dict[str, Any]]:
     from .resource_freeze import load_frozen_jsonl
     root = project_root()
-    resource = root / "resources/constructions/filipino_constructions_v1.parquet"
+    selected = resource_paths or {
+        "resource": "resources/constructions/filipino_constructions_v1.parquet",
+        "manifest": "resources/constructions/construction_manifest_v1.json",
+    }
+    resource = _selected_path(selected["resource"], root)
     if not resource.exists():
-        resource = root / "resources/constructions/filipino_constructions_v1.jsonl"
-    rows, manifest = load_frozen_jsonl(resource, root / "resources/constructions/construction_manifest_v1.json")
+        fallback = resource.with_suffix(".jsonl")
+        if fallback.exists():
+            resource = fallback
+    rows, manifest = load_frozen_jsonl(resource, _selected_path(selected["manifest"], root))
     return tuple(rows), manifest
 
 
-def load_frozen_punctuation() -> tuple[tuple[dict[str, Any], ...], dict[str, Any]]:
+def load_frozen_punctuation(resource_paths: dict[str, str] | None = None) -> tuple[tuple[dict[str, Any], ...], dict[str, Any]]:
     """Load reviewed punctuation-substitution contexts, if supplied.
 
     Generic punctuation swaps are intentionally not a production resource.
@@ -40,8 +55,14 @@ def load_frozen_punctuation() -> tuple[tuple[dict[str, Any], ...], dict[str, Any
     """
     from .resource_freeze import load_frozen_jsonl
     root = project_root()
-    resource = root / "resources/punctuation/punctuation_context_v1.parquet"
+    selected = resource_paths or {
+        "resource": "resources/punctuation/punctuation_context_v1.parquet",
+        "manifest": "resources/punctuation/punctuation_manifest_v1.json",
+    }
+    resource = _selected_path(selected["resource"], root)
     if not resource.exists():
-        resource = root / "resources/punctuation/punctuation_context_v1.jsonl"
-    rows, manifest = load_frozen_jsonl(resource, root / "resources/punctuation/punctuation_manifest_v1.json")
+        fallback = resource.with_suffix(".jsonl")
+        if fallback.exists():
+            resource = fallback
+    rows, manifest = load_frozen_jsonl(resource, _selected_path(selected["manifest"], root))
     return tuple(rows), manifest

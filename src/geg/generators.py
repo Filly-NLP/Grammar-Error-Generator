@@ -41,7 +41,9 @@ FUNCTION_WORDS = frozenset({
 # These are the only contexts currently allowed for automatic deletion or
 # duplication. They remain provisional until a Filipino linguist reviews the
 # pilot; the generator never falls back to arbitrary content-word edits.
-REVIEWED_FUNCTION_CONTEXTS = frozenset({
+# These are provisional high-precision contexts, not a linguistically
+# reviewed resource.  They remain subject to Phase 8 human review.
+PROVISIONAL_FUNCTION_CONTEXTS = frozenset({
     "ang", "ng", "mga", "sa", "at", "na", "ay", "si", "ni", "kay",
     "para", "kung", "dahil", "nang", "upang",
 })
@@ -180,10 +182,11 @@ class GeneratorContext:
     punctuation_by_tag: Mapping[str, tuple[Mapping[str, Any], ...]]
 
     @classmethod
-    def load(cls) -> "GeneratorContext":
-        morphology, morphology_manifest = load_frozen_morphology()
-        constructions, construction_manifest = load_frozen_constructions()
-        punctuation, punctuation_manifest = load_frozen_punctuation()
+    def load(cls, resource_paths: Mapping[str, Mapping[str, str]] | None = None) -> "GeneratorContext":
+        selected = resource_paths or {}
+        morphology, morphology_manifest = load_frozen_morphology(dict(selected.get("morphology", {})) or None)
+        constructions, construction_manifest = load_frozen_constructions(dict(selected.get("constructions", {})) or None)
+        punctuation, punctuation_manifest = load_frozen_punctuation(dict(selected.get("punctuation", {})) or None)
         morphology_rows = _freeze_rows(tuple(morphology))
         construction_rows = _freeze_rows(tuple(constructions))
         punctuation_rows = _freeze_rows(tuple(punctuation))
@@ -401,7 +404,7 @@ def _duplicate(text: str, tag: BalarilaTag, compute_alignment: bool) -> Generati
     word_tokens = tokens(text)
     rejected: dict[str, int] = {}
     for index, token in enumerate(word_tokens):
-        if token.core.lower() not in REVIEWED_FUNCTION_CONTEXTS or token.prefix or token.suffix:
+        if token.core.lower() not in PROVISIONAL_FUNCTION_CONTEXTS or token.prefix or token.suffix:
             continue
         # Sentence-boundary duplication is too ambiguous to create without a
         # reviewed construction pattern.  Interior function-word contexts
@@ -425,7 +428,7 @@ def _missing_word(text: str, tag: BalarilaTag, compute_alignment: bool) -> Gener
     word_tokens = tokens(text)
     rejected: dict[str, int] = {}
     for index, token in enumerate(word_tokens):
-        if token.core.lower() not in REVIEWED_FUNCTION_CONTEXTS or token.prefix or token.suffix:
+        if token.core.lower() not in PROVISIONAL_FUNCTION_CONTEXTS or token.prefix or token.suffix:
             continue
         # A terminal function word is often grammatical in its own right;
         # deleting it would create an arbitrary/irrecoverable target.  The
@@ -643,7 +646,13 @@ def _morphology(text: str, tag: BalarilaTag, compute_alignment: bool, context: G
                 operation = {
                     "type": "replace", "correct": surface, "generated_wrong": source_surface,
                     "target_surface": token.text, "source_surface": token.prefix + source_surface + token.suffix,
-                    "source_start": token.start, "source_end": token.end,
+                    # The erroneous span is the generated surface, not the
+                    # clean token span.  Inflectional replacements can change
+                    # length and a token may carry punctuation, so using
+                    # ``token.end`` here makes replay silently reject valid
+                    # morphology candidates (or validate the wrong slice).
+                    "source_start": token.start,
+                    "source_end": token.start + len(token.prefix + source_surface + token.suffix),
                     "target_start": token.start, "target_end": token.end,
                     "morphology_lemma": lemma,
                     "morphology_source_state": source_state,
@@ -707,7 +716,7 @@ def all_tag_ids() -> tuple[str, ...]:
     return tuple(item.id for item in registry())
 
 
-def production_coverage() -> dict[str, dict[str, str | bool]]:
+def production_coverage(resource_paths: Mapping[str, Mapping[str, str]] | None = None) -> dict[str, dict[str, str | bool]]:
     """Report implementation coverage independently of observed capacity."""
     implemented_families = {
         "ng_nang", "enclitic", "hyphen", "space", "duplicate_word", "missing_word",
@@ -717,7 +726,7 @@ def production_coverage() -> dict[str, dict[str, str | bool]]:
     resource_error: dict[str, str] = {}
     context: GeneratorContext | None = None
     try:
-        context = get_generator_context()
+        context = GeneratorContext.load(resource_paths)
         resource_available["hyphen"] = any(row.get("family") == "hyphen" and row.get("review_status") == "approved" for row in context.construction_rows)
         resource_available["space"] = any(row.get("family") == "space" and row.get("review_status") == "approved" for row in context.construction_rows)
         resource_available["morphology"] = bool(context.morphology_rows)

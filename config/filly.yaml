@@ -39,6 +39,23 @@
     "candidate_buffer_ratio": 1.25,
     "require_aggregate_manifest": true
   },
+  "phase8": {
+    "pilot_total": 100000
+  },
+  "resources": {
+    "morphology": {
+      "resource": "resources/morphology/tagalog_verb_paradigms_v1.parquet",
+      "manifest": "resources/morphology/morphology_manifest_v1.json"
+    },
+    "constructions": {
+      "resource": "resources/constructions/filipino_constructions_v1.parquet",
+      "manifest": "resources/constructions/construction_manifest_v1.json"
+    },
+    "punctuation": {
+      "resource": "resources/punctuation/punctuation_context_v1.parquet",
+      "manifest": "resources/punctuation/punctuation_manifest_v1.json"
+    }
+  },
   "morphology": {
     "primary_seed": "unimorph_tgl",
     "require_frozen_resource_version": true,

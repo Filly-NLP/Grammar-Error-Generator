@@ -16,6 +16,23 @@ from .tags import require_registered
 from .tags import registry
 
 
+def _stable_artifact_identity(path: Path) -> str:
+    """Return a location-independent provenance token for an auxiliary file."""
+    resolved = path.resolve()
+    project = Path(__file__).resolve().parents[2]
+    try:
+        return resolved.relative_to(project).as_posix()
+    except ValueError:
+        # Freeze destinations do not exist until after the manifest is built;
+        # bind an opaque location token for those paths. Existing auxiliary
+        # inputs use their bytes below, so production dependency identity is
+        # never tied to an absolute operator path.
+        if not resolved.exists():
+            import hashlib
+            return f"external-path::{hashlib.sha256(str(resolved).encode('utf-8')).hexdigest()}"
+        return f"external-content::{sha256_file(resolved)}"
+
+
 def _reviewed_terminal_mark(context: str, value: Any) -> str | None:
     """Return a canonical terminal mark from a mark or full context pattern.
 
@@ -181,6 +198,7 @@ def freeze_morphology(
     mapping_rule_version: str,
     mapping_rule_artifact: Path | None = None,
     minimum_validated_states: int = 3,
+    resource_version: str = "tagalog-verb-paradigms-v1",
 ) -> dict[str, Any]:
     """Freeze only explicitly approved, manually reviewed morphology rows."""
     if not reviewer.strip() or not reviewed_at.strip() or not source_resource.strip() or not source_version.strip() or not license_text.strip() or not mapping_rule_version.strip():
@@ -191,6 +209,8 @@ def freeze_morphology(
         raise ValueError("reviewed_at must be ISO-8601") from error
     if minimum_validated_states < 1:
         raise ValueError("minimum_validated_states must be >= 1")
+    if not resource_version.strip():
+        raise ValueError("resource_version is required")
     rows = _read_jsonl(input_path)
     if not rows:
         raise ValueError("reviewed morphology input is empty")
@@ -228,6 +248,7 @@ def freeze_morphology(
             "source_features": row.get("unimorph_features", row.get("source_features")),
             "confidence": "reviewed",
             "review_status": "approved",
+            "resource_version": resource_version,
         })
     enabled = {lemma for lemma, values in states_by_lemma.items() if len(values) >= minimum_validated_states}
     if not enabled:
@@ -238,14 +259,14 @@ def freeze_morphology(
     if mapping_rule_artifact is None or not mapping_rule_artifact.is_file():
         raise ValueError("mapping_rule_artifact is required and must exist for an approved morphology freeze")
     manifest = {
-        "schema_version": 1,
-        "resource_version": "tagalog-verb-paradigms-v1",
+        "schema_version": 2,
+        "resource_version": resource_version,
         "source_resource": source_resource,
         "source_resource_version": source_version,
         "source_input_sha256": sha256_file(input_path),
         "license": license_text,
         "mapping_rule_version": mapping_rule_version,
-        "mapping_rule_artifact": str(mapping_rule_artifact.resolve()),
+        "mapping_rule_artifact": _stable_artifact_identity(mapping_rule_artifact),
         "mapping_rule_artifact_sha256": sha256_file(mapping_rule_artifact),
         "reviewer": reviewer,
         "reviewed_at": reviewed_at,
@@ -253,7 +274,7 @@ def freeze_morphology(
         "row_count": len(normalized),
         "lemma_count": len(enabled),
         "state_counts": dict(sorted(Counter(row["balarila_state"] for row in normalized).items())),
-        "frozen_resource": str(resource_path),
+        "frozen_resource": _stable_artifact_identity(resource_path),
         "approved_only": True,
     }
     return _publish_pair(input_path, resource_path, manifest_path, normalized, manifest)
@@ -269,6 +290,7 @@ def freeze_constructions(
     source_resource: str,
     source_version: str,
     license_text: str,
+    resource_version: str = "filipino-constructions-v1",
 ) -> dict[str, Any]:
     """Freeze approved hyphen/spacing constructions without inventing rules."""
     if not all(item.strip() for item in (reviewer, reviewed_at, source_resource, source_version, license_text)):
@@ -277,6 +299,8 @@ def freeze_constructions(
         datetime.fromisoformat(reviewed_at.replace("Z", "+00:00"))
     except ValueError as error:
         raise ValueError("reviewed_at must be ISO-8601") from error
+    if not resource_version.strip():
+        raise ValueError("resource_version is required")
     rows = _read_jsonl(input_path)
     if not rows:
         raise ValueError("reviewed construction input is empty")
@@ -310,12 +334,12 @@ def freeze_constructions(
             "correction_tag": tag,
             "family": str(row["family"]),
             "review_status": "approved",
-            "resource_version": "filipino-constructions-v1",
+            "resource_version": resource_version,
             "notes": row.get("notes"),
         })
     manifest = {
-        "schema_version": 1,
-        "resource_version": "filipino-constructions-v1",
+        "schema_version": 2,
+        "resource_version": resource_version,
         "source_resource": source_resource,
         "source_resource_version": source_version,
         "source_input_sha256": sha256_file(input_path),
@@ -324,7 +348,7 @@ def freeze_constructions(
         "reviewed_at": reviewed_at,
         "row_count": len(normalized),
         "family_counts": dict(sorted(Counter(row["family"] for row in normalized).items())),
-        "frozen_resource": str(resource_path),
+        "frozen_resource": _stable_artifact_identity(resource_path),
         "approved_only": True,
     }
     return _publish_pair(input_path, resource_path, manifest_path, normalized, manifest)
@@ -340,6 +364,7 @@ def freeze_punctuation_context(
     source_resource: str,
     source_version: str,
     license_text: str,
+    resource_version: str = "filipino-punctuation-context-v1",
 ) -> dict[str, Any]:
     """Freeze explicitly reviewed punctuation-substitution contexts."""
     if not all(item.strip() for item in (reviewer, reviewed_at, source_resource, source_version, license_text)):
@@ -348,6 +373,8 @@ def freeze_punctuation_context(
         datetime.fromisoformat(reviewed_at.replace("Z", "+00:00"))
     except ValueError as error:
         raise ValueError("reviewed_at must be ISO-8601") from error
+    if not resource_version.strip():
+        raise ValueError("resource_version is required")
     rows = _read_jsonl(input_path)
     if not rows:
         raise ValueError("reviewed punctuation input is empty")
@@ -391,12 +418,12 @@ def freeze_punctuation_context(
             "correction_tag": tag,
             "family": "punctuation",
             "review_status": "approved",
-            "resource_version": "filipino-punctuation-context-v1",
+            "resource_version": resource_version,
             "notes": row.get("notes"),
         })
     manifest = {
-        "schema_version": 1,
-        "resource_version": "filipino-punctuation-context-v1",
+        "schema_version": 2,
+        "resource_version": resource_version,
         "source_resource": source_resource,
         "source_resource_version": source_version,
         "source_input_sha256": sha256_file(input_path),
@@ -405,7 +432,7 @@ def freeze_punctuation_context(
         "reviewed_at": reviewed_at,
         "row_count": len(normalized),
         "tag_counts": dict(sorted(Counter(row["correction_tag"] for row in normalized).items())),
-        "frozen_resource": str(resource_path),
+        "frozen_resource": _stable_artifact_identity(resource_path),
         "approved_only": True,
     }
     return _publish_pair(input_path, resource_path, manifest_path, normalized, manifest)
@@ -415,9 +442,16 @@ def load_frozen_jsonl(resource_path: Path, manifest_path: Path) -> tuple[list[di
     if not resource_path.is_file() or not manifest_path.is_file():
         return [], {}
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    if not isinstance(manifest, dict) or not isinstance(manifest.get("resource_version"), str) or not manifest.get("resource_version", "").strip():
+    required_manifest = ("resource_version", "frozen_resource_sha256", "source_resource", "source_resource_version", "license", "reviewer", "reviewed_at", "approved_only")
+    if not isinstance(manifest, dict) or any(not str(manifest.get(field, "")).strip() for field in required_manifest[:-1]):
         raise ValueError(f"frozen resource manifest is missing resource_version: {manifest_path}")
-    if manifest.get("frozen_resource_sha256") != sha256_file(resource_path) or manifest.get("approved_only") is not True:
+    if manifest.get("approved_only") is not True or not isinstance(manifest.get("frozen_resource_sha256"), str):
+        raise ValueError(f"frozen resource manifest is not approved: {manifest_path}")
+    try:
+        datetime.fromisoformat(str(manifest["reviewed_at"]).replace("Z", "+00:00"))
+    except ValueError as error:
+        raise ValueError(f"frozen resource manifest reviewed_at is invalid: {manifest_path}") from error
+    if manifest.get("frozen_resource_sha256") != sha256_file(resource_path):
         raise ValueError(f"frozen resource hash/approval mismatch: {resource_path}")
     if resource_path.suffix.lower() == ".parquet":
         try:
@@ -429,4 +463,9 @@ def load_frozen_jsonl(resource_path: Path, manifest_path: Path) -> tuple[list[di
         rows = _read_jsonl(resource_path)
     if any(row.get("review_status") != "approved" for row in rows):
         raise ValueError(f"frozen resource contains unapproved rows: {resource_path}")
+    resource_version = str(manifest.get("resource_version", ""))
+    if any("resource_version" in row and str(row.get("resource_version")) != resource_version for row in rows):
+        raise ValueError(f"frozen resource row version does not match manifest: {resource_path}")
+    if manifest.get("row_count") is not None and int(manifest["row_count"]) != len(rows):
+        raise ValueError(f"frozen resource row count does not match manifest: {resource_path}")
     return rows, manifest

@@ -1118,3 +1118,56 @@ material failure.
   `README.md text diff` attribute so Git treats the documentation as text and
   GitHub can render it normally. The current validation count remains
   **151 passed**.
+
+## 2026-09-10 - Second-pass dependency and pilot configuration refresh
+
+- Phase 8 now resolves its authoritative total from `config/filly.yaml`
+  `phase8.pilot_total` and derives train/dev/synthetic-test targets from the
+  configured split fractions; reports record the effective allocation.
+- Phase 8 review manifests are schema v2. Production approval binds pilot
+  hashes at both root and target together with the current generator/resource
+  dependency, config, and capacity-report hashes. Schema-v1 or missing
+  production identities are incompatible and cannot unlock Phase 9/10.
+- Runtime generator hashing no longer includes absolute external mapping paths;
+  auxiliary dependencies use stable content identities. Phase 10 manifests now
+  expose the canonical `generator_dependency_hash`.
+- Frozen-resource loading now validates provenance metadata, review timestamps,
+  approved-only rows, resource hashes, and manifest row counts. The provisional
+  function-word context name now states its pending linguistic-review status.
+- Synthetic-test diagnostics reject artifacts whose observed row count differs
+  from the final manifest split count.
+- These changes invalidate existing Phase 6/8/9/10 artifacts. No production
+  regeneration occurred. Full suite after this slice: **151 passed**.
+- Thesis synchronization remains pending: update older manuscript wording so
+  grammar-only GEC training is clearly separated from informal end-to-end
+  evaluation noise.
+
+## 2026-09-10 - Production gate/resource identity hardening
+
+- Phase 9 and Phase 10 now load the current validated configuration and
+  capacity state before calling the review gate in production mode. The gate
+  receives explicit generator/config/capacity hashes; schema-v2 approvals
+  missing those identities cannot unlock output, and crafted legacy approvals
+  leave no candidate/final artifact.
+- Morphology replacement operations now use the generated erroneous surface
+  length for source spans, including punctuation-bearing tokens. A regression
+  test replays a longer inflection back to the clean target.
+- Resource payload and manifest paths are selected from validated config and
+  included in the dependency identity. Freeze commands accept explicit v2
+  resource versions, allowing a reviewed v2 resource to be adopted by config
+  without generator-code edits. No reviewed resource or pilot was fabricated;
+  the Phase 6/8/9/10 chain remains stale and production-blocked.
+- Fresh validation after this slice: **159 passed**. The source DB was not
+  written and no production candidate, pilot, aggregate, or final dataset was
+  regenerated.
+
+## 2026-09-10 - Explicit development override and order regression
+
+- Phase 9/10 now reject missing, minimal, or malformed configs by default;
+  fixture builds require `allow_development=True` or `--allow-development` and
+  are emitted with `production_ready=false`.
+- Added a real Phase 9 forward/reversed-Parquet integration regression. Stable
+  ranked selection yields identical pair IDs and preserves a late rare tag.
+- Added no-output tests for schema-v2 approvals missing production identities.
+  Full suite after this slice: **160 passed**. No production artifacts were
+  regenerated; the source DB remains unchanged.

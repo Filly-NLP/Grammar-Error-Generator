@@ -15,6 +15,15 @@ from .resource_freeze import load_frozen_jsonl
 from .resources import project_root
 
 
+def _selected_path(value: str | Path, root: Path) -> Path:
+    path = (root / Path(value)).resolve() if not Path(value).is_absolute() else Path(value).resolve()
+    try:
+        path.relative_to(root.resolve())
+    except ValueError as error:
+        raise ValueError("configured morphology resource must remain inside the repository") from error
+    return path
+
+
 @dataclass(frozen=True)
 class StateMapping:
     state: str | None
@@ -88,11 +97,18 @@ def map_unimorph_features(features: str) -> StateMapping:
     return StateMapping(state, aspect, focus, "provisional", "feature_bundle_rule")
 
 
-def load_frozen_morphology() -> tuple[tuple[dict[str, Any], ...], dict[str, Any]]:
+def load_frozen_morphology(resource_paths: dict[str, str] | None = None) -> tuple[tuple[dict[str, Any], ...], dict[str, Any]]:
     """Load the approved local resource, or return empty when not supplied."""
     root = project_root()
-    resource = root / "resources/morphology/tagalog_verb_paradigms_v1.parquet"
+    selected = resource_paths or {
+        "resource": "resources/morphology/tagalog_verb_paradigms_v1.parquet",
+        "manifest": "resources/morphology/morphology_manifest_v1.json",
+    }
+    resource = _selected_path(selected["resource"], root)
     if not resource.exists():
-        resource = root / "resources/morphology/tagalog_verb_paradigms_v1.jsonl"
-    rows, manifest = load_frozen_jsonl(resource, root / "resources/morphology/morphology_manifest_v1.json")
+        fallback = resource.with_suffix(".jsonl")
+        if fallback.exists():
+            resource = fallback
+    manifest = _selected_path(selected["manifest"], root)
+    rows, manifest = load_frozen_jsonl(resource, manifest)
     return tuple(rows), manifest

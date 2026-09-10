@@ -23,12 +23,14 @@ def main() -> None:
     parser.add_argument("--source-resource", required=True)
     parser.add_argument("--source-version", required=True)
     parser.add_argument("--license", required=True)
+    parser.add_argument("--resource-version", default="filipino-constructions-v1")
     args = parser.parse_args()
     result = freeze_constructions(
         args.input, args.resource, args.manifest,
         reviewer=args.reviewer, reviewed_at=args.reviewed_at,
         source_resource=args.source_resource, source_version=args.source_version,
         license_text=args.license,
+        resource_version=args.resource_version,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
 

@@ -12,6 +12,25 @@ from typing import Any
 
 SPLITS = ("train", "dev", "synthetic_test")
 
+# Resource locations are configuration, not code constants.  Keeping these
+# defaults here preserves the current development layout while allowing an
+# operator to select a newly frozen v2 resource by changing only the validated
+# config and its provenance hash.
+DEFAULT_RESOURCE_PATHS = {
+    "morphology": {
+        "resource": "resources/morphology/tagalog_verb_paradigms_v1.parquet",
+        "manifest": "resources/morphology/morphology_manifest_v1.json",
+    },
+    "constructions": {
+        "resource": "resources/constructions/filipino_constructions_v1.parquet",
+        "manifest": "resources/constructions/construction_manifest_v1.json",
+    },
+    "punctuation": {
+        "resource": "resources/punctuation/punctuation_context_v1.parquet",
+        "manifest": "resources/punctuation/punctuation_manifest_v1.json",
+    },
+}
+
 
 def load_config(path: Path) -> dict[str, Any]:
     text = path.read_text(encoding="utf-8")
@@ -60,7 +79,9 @@ def validate_config(config: dict[str, Any]) -> dict[str, Any]:
     splits = value.get("splits", {})
     stages = value.get("stage_views", {})
     phase9 = value.get("phase9", {})
+    phase8 = value.get("phase8", {})
     morphology = value.get("morphology", {})
+    resources = value.get("resources", {})
     total = int(dataset.get("target_total_pairs", 0))
     if total <= 0:
         raise ValueError("dataset.target_total_pairs must be positive")
@@ -84,6 +105,11 @@ def validate_config(config: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("stage errorful shares must sum to 1")
     if not isinstance(phase9, dict):
         raise ValueError("phase9 must be an object")
+    if not isinstance(phase8, dict):
+        raise ValueError("phase8 must be an object")
+    pilot_total = int(phase8.get("pilot_total", 100_000))
+    if pilot_total <= 0:
+        raise ValueError("phase8.pilot_total must be positive")
     try:
         candidate_buffer = Decimal(str(phase9.get("candidate_buffer_ratio", "1.0")))
     except Exception as error:
@@ -92,6 +118,18 @@ def validate_config(config: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("phase9.candidate_buffer_ratio must be >= 1")
     if int(morphology.get("minimum_validated_states_per_lemma", 0)) < 1:
         raise ValueError("morphology.minimum_validated_states_per_lemma must be >= 1")
+    if resources is not None and not isinstance(resources, dict):
+        raise ValueError("resources must be an object")
+    for resource_name, defaults in DEFAULT_RESOURCE_PATHS.items():
+        configured = (resources or {}).get(resource_name, {})
+        if configured is not None and not isinstance(configured, dict):
+            raise ValueError(f"resources.{resource_name} must be an object")
+        for key in defaults:
+            selected = (configured or {}).get(key, defaults[key])
+            if not isinstance(selected, str) or not selected.strip():
+                raise ValueError(f"resources.{resource_name}.{key} must be a non-empty repository-relative path")
+            if Path(selected).is_absolute() or ".." in Path(selected).parts:
+                raise ValueError(f"resources.{resource_name}.{key} must be repository-relative")
     try:
         from .tags import registry
         expected_tags = len(registry())
@@ -112,6 +150,7 @@ def resolve_runtime_config(config: dict[str, Any]) -> dict[str, Any]:
     splits = value["splits"]
     stages = value["stage_views"]
     phase9 = value.get("phase9", {})
+    phase8 = value.get("phase8", {})
     candidate_buffer = Decimal(str(phase9.get("candidate_buffer_ratio", "1.0")))
     value["runtime"] = {
         "seed": int(value["project"]["seed"]),
@@ -122,8 +161,28 @@ def resolve_runtime_config(config: dict[str, Any]) -> dict[str, Any]:
         "dataset2_errorful_share": str(_decimal(stages["dataset2_errorful_share"], "stage_views.dataset2_errorful_share")),
         "group_by_document": bool(value.get("splits", {}).get("group_by_document", True)),
         "candidate_buffer_ratio": str(candidate_buffer),
+        "pilot_total": int(phase8.get("pilot_total", 100_000)),
+        "resource_paths": resource_paths(value),
     }
     # Keep a short alias for callers that need resolved values while keeping
     # the original config tree intact for hashing and provenance.
     value["splits"] = {**value["splits"], **value["runtime"]["split_fractions"]}
     return value
+
+
+def resource_paths(config: dict[str, Any]) -> dict[str, dict[str, str]]:
+    """Return the validated, config-selected resource path identities.
+
+    The returned paths are still repository-relative strings.  Callers resolve
+    them against their canonical project root and bind both payload and
+    manifest bytes into the generator dependency hash.  No mutable "latest"
+    pointer is consulted at runtime.
+    """
+    resources = config.get("resources", {}) if isinstance(config, dict) else {}
+    return {
+        name: {
+            key: str((resources.get(name, {}) if isinstance(resources, dict) else {}).get(key, default))
+            for key, default in defaults.items()
+        }
+        for name, defaults in DEFAULT_RESOURCE_PATHS.items()
+    }

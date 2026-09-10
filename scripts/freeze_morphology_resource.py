@@ -26,6 +26,7 @@ def main() -> None:
     parser.add_argument("--mapping-rule-version", required=True)
     parser.add_argument("--mapping-rule-artifact", type=Path, required=True)
     parser.add_argument("--minimum-validated-states", type=int, default=3)
+    parser.add_argument("--resource-version", default="tagalog-verb-paradigms-v1")
     args = parser.parse_args()
     result = freeze_morphology(
         args.input, args.resource, args.manifest,
@@ -34,6 +35,7 @@ def main() -> None:
         license_text=args.license, mapping_rule_version=args.mapping_rule_version,
         mapping_rule_artifact=args.mapping_rule_artifact,
         minimum_validated_states=args.minimum_validated_states,
+        resource_version=args.resource_version,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
